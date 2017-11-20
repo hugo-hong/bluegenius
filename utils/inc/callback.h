@@ -35,14 +35,14 @@ public:
 }
 
 template<class T>
-class CCallbackProxy : public ICallback {
+class CallbackProxy : public ICallback {
   typedef void(T::PFNCALLBACK)(uint32_t, uint32_t, void*);
 public:
-  CCallbackProxy(T *pObject, PFNCALLBACK pfnCallback) {
+  CallbackProxy(T *pObject, PFNCALLBACK pfnCallback) {
     m_pObject = pObject;
     m_pfnCallback = pfnCallback;
   }
-  ~CCallbackProxy{
+  ~CallbackProxy{
   }
   void excute(uint32_t arg1,  uint32_t arg2, void * arg3) {
     if (m_pObject != NULL && m_pfnCallback != NULL)
@@ -54,11 +54,11 @@ private:
   PFNCALLBACK m_pfnCallback;
 }
 
-class CCallbackHandler {
+class CallbackHandler {
 public:
-  CCallbackHandler() {
+  CallbackHandler() {
   }
-  ~CCallbackHandler() {
+  ~CallbackHandler() {
     cleanup();
   }
   void regCallback(int key, ICallback *callback) {
@@ -91,7 +91,7 @@ private:
 #define REGISTER_CALLBACK(theClass, id, object, memberFxn, handler) \
 { \
   if (object != NULL && membenFxn != NULL) { \
-    CCallbackProxy<theClass> *thisCallback = new CCallbackProxy<theClass>(object, memberFxn); \
+    CallbackProxy<theClass> *thisCallback = new CallbackProxy<theClass>(object, memberFxn); \
     handler.regCallback(id, thisCallback); \
   } \
 }
