@@ -88,10 +88,10 @@ private:
   map<int, ICallback*> m_callbacks;
 }
 
-#define REGISTER_CALLBACK(theClass, id, object, membenFxn, handler) \
+#define REGISTER_CALLBACK(theClass, id, object, memberFxn, handler) \
 { \
   if (object != NULL && membenFxn != NULL) { \
-    CCallbackProxy<theClass> *thisCallback = new CCallbackProxy<theClass>(object, membenFxn); \
+    CCallbackProxy<theClass> *thisCallback = new CCallbackProxy<theClass>(object, memberFxn); \
     handler.regCallback(id, thisCallback); \
   } \
 }
