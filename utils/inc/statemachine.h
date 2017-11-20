@@ -80,3 +80,5 @@ private:
   list<SM_MSG_T> m_deferMessages;
   CallbackHandler m_stateHandler;
 }
+
+#endif //_STATE_MACHINE_H_
