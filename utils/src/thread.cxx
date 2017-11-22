@@ -221,3 +221,12 @@ static void* run_thread(void* arg) {
            thread->tid, thread->name);
   return NULL;
 }
+
+static void work_queue_read_cb(void* context) {
+  CHECK(context != NULL);
+
+  fixed_queue_t* queue = (fixed_queue_t*)context;
+  work_item_t* item = static_cast<work_item_t*>(fixed_queue_dequeue(queue));
+  item->func(item->context);
+  sys_free(item);
+}
