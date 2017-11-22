@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#define THREAD_NAME_MAX       (64)
+#define THREAD_NAME_MAX       (16)//PR_SET_NAME limit max name length 16 bytes
 
 typedef void (*thread_fn)(void* context);
 
