@@ -149,6 +149,6 @@ void StateMachine :: ProcessMessage(SM_MSG_T *pMsg) {
 
 void StateMachine :: HandleMessage(fixed_queue_t *queue, void* context) {  
   StateMachine *pInstance = dynamic_cast<StateMachine*>(context);
-  CHECK(pInstance != NULL);
+  CHECK(pInstance != NULL && queue != NULL);
   pInstance->ProcessMessage((SM_MSG_T*)fixed_queue_dequeue(queue));
 }
