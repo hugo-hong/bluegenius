@@ -42,22 +42,19 @@ void StateMachine :: Start(int priority) {
   }
 
   m_pCurMessageQueue = fixed_queue_new(SIZE_MAX);
-  m_pDefMessageList = list_new(sys_free);
-
+  m_pDefMessageList = list_new(NULL);
   fixed_queue_register_dequeue(
     m_pCurMessageQueue,
     thread_get_reactor(m_pMainThread),
-    StateMachine::ProcessMessage, this);  
+    StateMachine::HandleMessage, this);  
 
   thread_set_rt_priority(m_pMainThread, priority);
-  thread_post(m_pMainThread, StateMachine::Init, this);
-
 }
 
 void StateMachine :: Stop(void) {
   fixed_queue_unregister_dequeue(m_pCurMessageQueue);
-  fixed_queue_unregister_dequeue(m_pDefMessageQueue);
-  fixed_queue_free();
+  fixed_queue_free(m_pCurMessageQueue);
+  list_free(m_pDefMessageList);
   thread_free(m_pMainThread);
 }
 
@@ -114,16 +111,44 @@ void StateMachine :: ExitState(int state) {
   INVOKE_CALLBACK(state, SM_MSG_STATE_EXIT, 0, NULL, m_stateHandler);
 }
 
-void StateMachine :: ToggleState(int state) {  
-  
+void StateMachine :: ToggleState(void) {  
+  if (m_destState != INVALID_STATE && 
+      m_destState != m_curState) {
+    doTransition();
+  }
 }
 
 void StateMachine :: DoTransition(void) {  
-  
+  ExitState(m_curState);
+  m_curState = m_destState;
+  EnterState(m_destState);
+  m_destState = INVALID_STATE;
+  ProcessDeferdMessage();
 }
 
-void StateMachine :: ProcessMessage(void* context) {  
+void StateMachine :: ProcessDeferdMessage(void) {  
+  int len = list_length(m_pDefMessageList);
+  for (int = 0; i < len; i++) {
+    SM_MSG_T *pMsg = list_front(m_pDefMessageList);
+    fixed_queue_enqueue(m_pCurMessageQueue, pMsg);
+    list_remove(m_pDefMessageList, pMsg);
+  }
+}
+
+void StateMachine :: ProcessMessage(SM_MSG_T *pMsg) {  
+  CHECK(pMsg != NULL);
+
+  if (SM_MSG_TOGGLE_STATE != pMsg->msg_id) {
+    INVOKE_CALLBACK(m_curState, pMsg->msg_id, pMsg->u4Size, pMsg->param, m_stateHandler);
+  }
+	
+  ToggleState();
+  
+  sys_free(pMsg);
+}
+
+void StateMachine :: HandleMessage(fixed_queue_t *queue, void* context) {  
   StateMachine *pInstance = dynamic_cast<StateMachine*>(context);
   CHECK(pInstance != NULL);
+  pInstance->ProcessMessage((SM_MSG_T*)fixed_queue_dequeue(queue));
 }
-	
