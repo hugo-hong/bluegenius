@@ -32,11 +32,11 @@ void future_free(future_t* future) {
   if (!future) return;
   
   event_close(future->event);
-  sis_free(future);
+  sys_free(future);
 }
 
 future_t* future_new(void* value) {
-  future_t* future = static_cast<future_t*>sis_calloc(sizeof(future_t));
+  future_t* future = static_cast<future_t*>sys_calloc(sizeof(future_t));
   CHECK(future != NULL);
   
   future->event = event_create(0);
