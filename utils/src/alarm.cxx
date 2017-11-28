@@ -75,11 +75,50 @@ struct alarm_t {
 94int64_t TIMER_INTERVAL_FOR_WAKELOCK_IN_MS = 3000;
 95static const clockid_t CLOCK_ID = CLOCK_BOOTTIME;
 
+// This mutex ensures that the |alarm_set|, |alarm_cancel|, and alarm callback
+// functions execute serially and not concurrently. As a result, this mutex
+// also protects the |alarms| list.
+static std::mutex alarms_mutex;
+static list_t* alarms;
+static timer_t timer;
+static bool timer_set;
+
+// All alarm callbacks are dispatched from |dispatcher_thread|
+static thread_t* dispatcher_thread;
+static bool dispatcher_thread_active;
+static event_t* alarm_expired;
+
+// Default alarm callback thread and queue
+static thread_t* default_callback_thread;
+static fixed_queue_t* default_callback_queue;
+
+alarm_t* alarm_new(const char* name) { 
+   return alarm_new_internal(name, false); 
+}
+
+static alarm_t* alarm_new_internal(const char* name, bool is_periodic) {
+  // Make sure we have a list we can insert alarms into.
+  if (!alarms && !lazy_initialize()) {
+    CHECK(false);  // if initialization failed, we should not continue
+    return NULL;
+  }
+
+  alarm_t* ret = static_cast<alarm_t*>(sys_calloc(sizeof(alarm_t)));
+
+  ret->callback_mutex = new std::recursive_mutex;
+  ret->is_periodic = is_periodic;
+  ret->stats.name = osi_strdup(name);
+  // NOTE: The stats were reset by osi_calloc() above
+
+  return ret;
+}
+
 static void update_stat(stat_t* stat, uint64_t delta) {
   if (stat->max_ms < delta) stat->max_ms = delta;
   stat->total_ms += delta;
   stat->count++;
 }
+
 
 bool alarm_is_scheduled(const alarm_t* alarm) {
   if ((alarms == NULL) || (alarm == NULL)) return false;
