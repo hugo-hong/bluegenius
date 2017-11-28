@@ -32,7 +32,8 @@ public:
   }
 protected:
   static void init() {
-    m_pInstance = new T();
+    static Singleton<T> INSTANCE;
+    m_pInstance = &INSTANCE;
   }
 private:
   Singleton(){}
