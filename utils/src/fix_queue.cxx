@@ -31,223 +31,156 @@ typedef struct fixed_queue_t {
   void* dequeue_context;
 } fixed_queue_t;
 
-static void internal_dequeue_ready(void* context);
 
-fixed_queue_t* fixed_queue_new(size_t capacity) {
-  fixed_queue_t* ret =
-      static_cast<fixed_queue_t*>(sys_calloc(sizeof(fixed_queue_t)));
-
-  ret->mutex = new std::mutex;
-  ret->capacity = capacity;
-
-  ret->list = list_new(NULL);
-  if (!ret->list) goto error;
-
-  ret->enqueue_evt = event_create(capacity);
-  if (!ret->enqueue_evt) goto error;
-
-  ret->dequeue_evt = event_new(0);
-  if (!ret->dequeue_evt) goto error;
-
-  return ret;
-
-error:
-  fixed_queue_free(ret, NULL);
-  return NULL;
+FixedQueue::FixedQueue(size_t capacity)
+    :m_capacity(0)
+    ,m_pList(NULL)
+    ,m_pEnqueueEvt(NULL)
+    ,m_pDequeueEvt(NULL)
+{
+   New(capacity);
 }
 
-void fixed_queue_free(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
-  if (!queue) return;
-
-  fixed_queue_unregister_dequeue(queue);
-
-  if (free_cb)
-    for (const list_node_t* node = list_begin(queue->list);
-         node != list_end(queue->list); node = list_next(node))
-      free_cb(list_node(node));
-
-  list_free(queue->list);
-  event_free(queue->enqueue_evt);
-  event_free(queue->dequeue_evt);
-  delete queue->mutex;
-  sys_free(queue);
+FixedQueue::~FixedQueue() {
+    Free();
 }
 
-void fixed_queue_flush(fixed_queue_t* queue, fixed_queue_free_cb free_cb) {
-  if (!queue) return;
+void FixedQueue::Flush() {
+}
 
-  while (!fixed_queue_is_empty(queue)) {
-    void* data = fixed_queue_try_dequeue(queue);
-    if (free_cb != NULL) {
-      free_cb(data);
+bool FixedQueue::IsEmpty() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_pList->IsEmpty();
+}
+
+size_t FixedQueue::GetLength() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_pList->Length();
+}
+
+void FixedQueue::Enqueue(void* data) {
+    CHECK(data != NULL);
+    
+    m_pEnqueueEvt->Wait();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_pList->Append(data);
     }
-  }
+    m_pDequeueEvt->Post();
 }
 
-bool fixed_queue_is_empty(fixed_queue_t* queue) {
-  if (queue == NULL) return true;
-
-  std::lock_guard<std::mutex> lock(*queue->mutex);
-  return list_is_empty(queue->list);
-}
-
-size_t fixed_queue_length(fixed_queue_t* queue) {
-  if (queue == NULL) return 0;
-
-  std::lock_guard<std::mutex> lock(*queue->mutex);
-  return list_length(queue->list);
-}
-
-size_t fixed_queue_capacity(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
-
-  return queue->capacity;
-}
-
-void fixed_queue_enqueue(fixed_queue_t* queue, void* data) {
-  CHECK(queue != NULL);
-  CHECK(data != NULL);
-
-  event_wait(queue->enqueue_evt);
-
-  {
-    std::lock_guard<std::mutex> lock(*queue->mutex);
-    list_append(queue->list, data);
-  }
-
-  event_post(queue->dequeue_evt);
-}
-
-void* fixed_queue_dequeue(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
-
-  event_wait(queue->dequeue_sem);
-
-  void* ret = NULL;
-  {
-    std::lock_guard<std::mutex> lock(*queue->mutex);
-    ret = list_front(queue->list);
-    list_remove(queue->list, ret);
-  }
-
-  event_post(queue->enqueue_evt);
-
-  return ret;
-}
-
-bool fixed_queue_try_enqueue(fixed_queue_t* queue, void* data) {
-  CHECK(queue != NULL);
-  CHECK(data != NULL);
-
-  if (!event_try_wait(queue->enqueue_sem)) return false;
-
-  {
-    std::lock_guard<std::mutex> lock(*queue->mutex);
-    list_append(queue->list, data);
-  }
-
-  event_post(queue->dequeue_evt);
-  return true;
-}
-
-void* fixed_queue_try_dequeue(fixed_queue_t* queue) {
-  if (queue == NULL) return NULL;
-
-  if (!event_try_wait(queue->dequeue_evt)) return NULL;
-
-  void* ret = NULL;
-  {
-    std::lock_guard<std::mutex> lock(*queue->mutex);
-    ret = list_front(queue->list);
-    list_remove(queue->list, ret);
-  }
-
-  event_post(queue->enqueue_evt);
-
-  return ret;
-}
-
-void* fixed_queue_try_peek_first(fixed_queue_t* queue) {
-  if (queue == NULL) return NULL;
-
-  std::lock_guard<std::mutex> lock(*queue->mutex);
-  return list_is_empty(queue->list) ? NULL : list_front(queue->list);
-}
-
-void* fixed_queue_try_peek_last(fixed_queue_t* queue) {
-  if (queue == NULL) return NULL;
-
-  std::lock_guard<std::mutex> lock(*queue->mutex);
-  return list_is_empty(queue->list) ? NULL : list_back(queue->list);
-}
-
-void* fixed_queue_try_remove_from_queue(fixed_queue_t* queue, void* data) {
-  if (queue == NULL) return NULL;
-
-  bool removed = false;
-  {
-    std::lock_guard<std::mutex> lock(*queue->mutex);
-    if (list_contains(queue->list, data) &&
-        event_try_wait(queue->dequeue_sem)) {
-      removed = list_remove(queue->list, data);
-      CHECK(removed);
+void* FixedQueue::Dequeue() {
+    m_pDequeueEvt->Wait();
+    
+    void* ret = NULL;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        ret = m_pList->Pop();        
     }
-  }
-
-  if (removed) {
-    event_post(queue->enqueue_sem);
-    return data;
-  }
-  return NULL;
+    m_pEnqueueEvt->Post();
+    
+    return ret;
 }
 
-list_t* fixed_queue_get_list(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
-
-  // NOTE: Using the list in this way is not thread-safe.
-  // Using this list in any context where threads can call other functions
-  // to the queue can break our assumptions and the queue in general.
-  return queue->list;
+bool FixedQueue::TryEnqueue(void* data) {
+    if (!m_pEnqueueEvt->TryWait()) return false;        
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_pList->Append(data);
+    }
+    m_pDequeueEvt->Post();
+    
+    return true;
 }
 
-int fixed_queue_get_dequeue_fd(const fixed_queue_t* queue) {
-  CHECK(queue != NULL);
-  return event_get_fd(queue->dequeue_evt);
+void* FixedQueue::TryDequeue() {
+    if (!m_pDequeueEvt->TryWait()) return NULL;
+    
+    void* ret = NULL;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        ret = m_pList->Pop();        
+    }
+    m_pEnqueueEvt->Post();
+    
+    return ret;
 }
 
-int fixed_queue_get_enqueue_fd(const fixed_queue_t* queue) {
-  CHECK(queue != NULL);
-  return event_get_fd(queue->enqueue_evt);
+void* FixedQueue::PeekFirst() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_pList->IsEmpty() ? NULL : m_pList->Front();
 }
 
-void fixed_queue_register_dequeue(fixed_queue_t* queue, reactor_t* reactor,
-                                  fixed_queue_cb ready_cb, void* context) {
-  CHECK(queue != NULL);
-  CHECK(reactor != NULL);
-  CHECK(ready_cb != NULL);
-
-  // Make sure we're not already registered
-  fixed_queue_unregister_dequeue(queue);
-
-  queue->dequeue_ready = ready_cb;
-  queue->dequeue_context = context;
-  queue->dequeue_object =
-      reactor_register(reactor, fixed_queue_get_dequeue_fd(queue), queue,
-                       internal_dequeue_ready, NULL);
+void* FixedQueue::PeekLast() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_pList->IsEmpty() ? NULL : m_pList->Last();
 }
 
-void fixed_queue_unregister_dequeue(fixed_queue_t* queue) {
-  CHECK(queue != NULL);
+void* FixedQueue::Remove(void* data) {
+    bool removed = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_pList->Contains(data) &&
+           m_pDequeueEvt->TryWait()) {
+            removed = m_pList->Remove(data); 
+        }
+    }
+    
+    if (removed) m_pEnqueueEvt->Post();
 
-  if (queue->dequeue_object) {
-    reactor_unregister(queue->dequeue_object);
-    queue->dequeue_object = NULL;
-  }
+    return removed ? data : NULL;
+}
+
+int FixedQueue::GetDequeueFd() {
+    return m_pDequeueEvt->GetFd();
+}
+
+int FixedQueue::GetEnqueueFd() {
+    return m_pEnqueueEvt->GetFd();
+}
+
+void FixedQueue::RegisterDequeue(fixed_queue_cb ready_cb, void* context) {
+    m_pfnDequeuReady = ready_cb;
+    m_pDequeueContext = context;
+}
+
+void FixedQueue::DeregisterDequeue() {
+}
+
+
+void FixedQueue::New(size_t capacity) {
+    m_capacity = capacity;
+    m_pList = new List(NULL);
+    m_pEnqueueEvt = new Event(capacity);
+    m_pDequeueEvt = new Event(0);    
+    
+    CHECK(m_pList != NULL);
+    CHECK(m_pEnqueueEvt != NULL);
+    CHECK(m_pDequeueEvt != NULL);
+}
+
+void FixedQueue::Free() {
+    m_capacity = 0;
+    
+    DeregisterDequeue();
+    
+    if (m_pList) {
+        delete m_pList;
+        m_pList = NULL;
+    }
+    if (m_pEnqueueEvt) {
+        delete m_pEnqueueEvt;
+        m_pEnqueueEvt = NULL;
+    }
+    if (m_pDequeueEvt) {
+        delete m_pDequeueEvt;
+        m_pDequeueEvt = NULL;
+    }
 }
 
 static void internal_dequeue_ready(void* context) {
   CHECK(context != NULL);
-
-  fixed_queue_t* queue = static_cast<fixed_queue_t*>(context);
+    
+  FixedQueue* queue = static_cast<FixedQueue*>(context);
   queue->dequeue_ready(queue, queue->dequeue_context);
 }
