@@ -20,7 +20,39 @@
 #ifndef _SEQLIST_H_
 #define _SEQLIST_H_
 
-class
+#include <stdbool.h>
+#include <stdlib.h>
+
+struct list_node_t {
+    struct list_node_t* next;
+    void* data;
+};
+
+class SeqList {
+public:
+    SeqList();
+    ~SeqList();
+    
+    void* Front();
+    void* Last();
+    void* Remove(void* data);
+    void* Append(void* data);    
+    void Clear();
+    list_node_t* Begain();
+    list_node_t* End();
+    
+    bool IsEmpty();
+    bool Contains(void* data);
+    
+protected:
+    void New();
+    void Free();
+    
+private:
+    std::mutex* m_mutex;
+    list_node_t* m_pHead;
+    list_node_t* m_pEnd;
+}
 
 
 #endif //_SEQLIST_H_
