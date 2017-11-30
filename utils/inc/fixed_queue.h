@@ -20,13 +20,46 @@
 #ifndef _FIXED_QUEUE_H_
 #define _FIXED_QUEUE_H_
 
+typedef void (*fixed_queue_cb)(FixedQueue* queue, void* context);
+
+
 class FixedQueue {
 public:
     FixedQueue(size_t capacity);
     ~FixedQueue();
     
+    void Flush();
+    bool IsEmpty();
+    size_t GetLength();
+    size_t GetCapcity() {return m_capacity;}
+    List* GetList() {return m_pList;}
+    void Enqueue(void* data);
+    void* Dequeue();
+    bool TryEnqueue(void* data);
+    void* TryDequeue();
+    void* PeekFirst();
+    void* PeekLast();
+    void* Remove(void* data);
+    int GetEnqueueFd();
+    int GetDequeueFd();
+    void RegisterDequeue(fixed_queue_cb ready_cb, void* context);
+    void DeregisterDequeue();
+    
 protected:
+    void New(size_t capacity);
+    void Free();
+    
+    friend static void internal_dequeue_ready(void* context);
+    
 private:
+    List* m_pList;
+    Event* m_pEnqueueEvt;
+    Event* m_pDequeueEvt;
+    std::mutex m_mutex;
+    size_t m_capacity;
+    
+    fixed_queue_cb m_pfnDequeuReady;
+    void* m_pDequeueContext;
 }
 
 #endif //_FIXED_QUEUE_H_
