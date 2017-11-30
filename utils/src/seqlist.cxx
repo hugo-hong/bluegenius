@@ -17,3 +17,87 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
+#include "seqlist.h"
+
+SeqList::SeqList (list_free_cb pfnFree)
+    :m_mutex(NULL)
+    ,m_pHead(NULL)
+    ,m_pTail(NULL)
+    ,m_length(0)
+    ,m_pfnFree(NULL)
+{
+    New(pfnFree);
+}
+
+SeqList::~SeqList () {
+    Free();
+}
+
+bool SeqList::IsEmpty() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    return (m_length == 0);
+}
+
+bool SeqList::Contains(void* data) {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    
+    for (const list_node_t* node = m_pHead; node != NULL; node = node->next) {
+        if (node->data == data) return true;
+    }
+    return false;
+}
+
+void* SeqList::Front() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    return (m_pHead == NULL ? NULL : m_pHead->data);
+}
+
+void* SeqList::Last() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    return (m_pTail == NULL ? NULL : m_pTail->data);
+}
+
+void* SeqList::Remove(void* data) {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    
+    list_node_t *Prev = m_pHead, *Next = m_pHead;   
+    while (Next != NULL) {
+        if (Next->data == data) {
+            Prev->next = FreeNode(Next);
+            if (Next == m_pHead) {
+                m_pHead = Prev->next;
+            }
+            if (Next == m_pTail) {
+                m_pTail = Prev;
+            }
+            return true;
+        }
+        Prev = Next;
+        Next = Next->next;
+    }
+    
+    return false;
+}
+
+void SeqList::New(list_free_cb pfnFree) {
+    m_pfnFree = pfnFree;
+    m_mutex = new std::mutex;
+}
+
+void SeqList::Free() {
+    clear();    
+    if (m_mutex) {
+        delete m_mutex;
+        m_mutex = NULL;
+    }
+}
+
+list_node_t* SeqList::FreeNode(list_node_t* node) {
+    CHECK(node != NULL);
+    
+    list_node_t* next = node->next;
+    if (m_pfnFree) m_pfnFree(node->data);
+    m_length--;
+    
+    return next;
+}
