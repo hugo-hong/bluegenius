@@ -17,3 +17,33 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
+#ifndef _REACTOR_H_
+#define _REACTOR_H_
+
+typedef void (*ready_cb)(void* context);
+
+class Reactor {
+public:
+    Reactor();
+    ~Reactor();
+    
+    reactor_status_t Start();
+    reactor_status_t RunOnce();
+    void Stop();
+    reactor_object_t* Register(int fd, void* context, ready_cb pfnRead, ready_cb pfnWrite);
+    void Unregister(reactor_object_t* obj);
+    
+protected:
+    void New();
+    void Free();
+    reactor_status_t Run(int iterations);
+    
+private:
+    int m_epollFd;
+    int m_eventFd;
+    bool m_isRunning;
+    bool m_isObjectRemoved;
+    pthread_t m_runThread;
+}
+
+#endif //_REACTOR_H_
