@@ -40,9 +40,9 @@ public:
     void* Last();
     bool Remove(void* data);
     bool Append(void* data);   
-    bool Insert(void* data, int index);
+    bool Insert(void* data, list_node_t* preNode);
     void Clear();
-    list_node_t* Begain();
+    list_node_t* Begin();
     list_node_t* End();
     size_t Size();
     bool IsEmpty();
