@@ -110,7 +110,7 @@ void SeqList::Clear() {
     m_length = 0;
 }
 
-list_node_t* SeqList::Begain() {
+list_node_t* SeqList::Begin() {
     std::lock_guard<std::mutex> lock(*m_mutex);
     return m_pHead;
 }
@@ -121,12 +121,22 @@ list_node_t* SeqList::End() {
 }
 
 bool Insert(void* data, list_node_t* preNode) {
-    if (index < 0 || index > Size())
-        return false;
     std::lock_guard<std::mutex> lock(*m_mutex);
     list_node_t* node = (list_node_t*)sys_malloc(sizeof(list_node_t));
     if (NULL == node) return false;
-    for (int i = 0; i < m_length; i++)
+    node->data = data;
+    if (NULL == preNode) {
+        //insert in head
+        node->next = m_pHead == NULL ? m_pTail = node, NULL : m_pHead->next;
+        m_pHead = node;        
+    }
+    else {
+        node->next = preNode->next;
+        m_pTail = m_pTail == preNode ? node : m_pTail;
+    }   
+    m_length++;
+   
+    return true;
 }
 
 void SeqList::New(list_free_cb pfnFree) {
