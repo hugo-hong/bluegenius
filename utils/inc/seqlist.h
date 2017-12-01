@@ -28,30 +28,39 @@ struct list_node_t {
     void* data;
 };
 
+typedef void (*list_free_cb)(void* data);
+
+
 class SeqList {
 public:
-    SeqList();
+    SeqList(list_free_cb pfnFree);
     ~SeqList();
     
     void* Front();
     void* Last();
-    void* Remove(void* data);
-    void* Append(void* data);    
+    bool Remove(void* data);
+    bool Append(void* data);   
+    bool Insert(void* data, int index);
     void Clear();
     list_node_t* Begain();
     list_node_t* End();
-    
+    size_t Size();
     bool IsEmpty();
     bool Contains(void* data);
     
 protected:
     void New();
     void Free();
+    list_node_t* FreeNode(list_node_t* node);
+    
     
 private:
     std::mutex* m_mutex;
     list_node_t* m_pHead;
-    list_node_t* m_pEnd;
+    list_node_t* m_pTail;
+    size_t m_length;
+    list_free_cb m_pfnFree;
+
 }
 
 
