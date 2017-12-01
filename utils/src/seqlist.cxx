@@ -47,6 +47,11 @@ bool SeqList::Contains(void* data) {
     return false;
 }
 
+size_t SeqList::Size() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    return m_length;
+}
+
 void* SeqList::Front() {
     std::lock_guard<std::mutex> lock(*m_mutex);
     return (m_pHead == NULL ? NULL : m_pHead->data);
@@ -57,7 +62,7 @@ void* SeqList::Last() {
     return (m_pTail == NULL ? NULL : m_pTail->data);
 }
 
-void* SeqList::Remove(void* data) {
+bool SeqList::Remove(void* data) {
     std::lock_guard<std::mutex> lock(*m_mutex);
     
     list_node_t *Prev = m_pHead, *Next = m_pHead;   
@@ -77,6 +82,51 @@ void* SeqList::Remove(void* data) {
     }
     
     return false;
+}
+
+bool SeqList::Append(void* data) {   
+    std::lock_guard<std::mutex> lock(*m_mutex);
+
+    list_node_t* node = (list_node_t*)sys_malloc(sizeof(list_node_t));
+    if (NULL == node) return false;
+    node->data = data;
+    node->next = NULL;
+    if (NULL == m_pTail) {       
+        m_pHead = m_pTail = node;
+    }
+    else {
+        m_pTail->next = node;
+        m_pTail = node;
+    }
+    m_length++;
+}
+
+void SeqList::Clear() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    
+    for (list_node_t* node = m_pHead; node != NULL; node = FreeNode(node))
+        //do nothing
+    m_pHead = m_pTail = NULL;
+    m_length = 0;
+}
+
+list_node_t* SeqList::Begain() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    return m_pHead;
+}
+
+list_node_t* SeqList::End() {
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    return m_pTail;
+}
+
+bool Insert(void* data, list_node_t* preNode) {
+    if (index < 0 || index > Size())
+        return false;
+    std::lock_guard<std::mutex> lock(*m_mutex);
+    list_node_t* node = (list_node_t*)sys_malloc(sizeof(list_node_t));
+    if (NULL == node) return false;
+    for (int i = 0; i < m_length; i++)
 }
 
 void SeqList::New(list_free_cb pfnFree) {
