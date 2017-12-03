@@ -22,10 +22,20 @@
 
 class Event {
 public:
-
+    Event();
+    ~Event();
+    
+    void Wait();
+    bool TryWait();
+    void Post();
+    int GetFd() {return m_fd;}
+    
 protected:
+    void New();
+    void Free();
+    
 private:
-
+    int m_fd;
 }
 
 #endif //_EVENT_H_
