@@ -21,6 +21,7 @@
 #define _FIXED_QUEUE_H_
 
 #include "seqlist.h"
+#include "event.h"
 
 typedef void (*fixed_queue_free_cb)(void* data);
 
