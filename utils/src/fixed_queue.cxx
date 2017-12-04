@@ -18,18 +18,7 @@
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
 #include <mutex>
-
-typedef struct fixed_queue_t {
-  list_t* list;
-  event_t* enqueue_evt;
-  event_t* dequeue_evt;
-  std::mutex* mutex;
-  size_t capacity;
-
-  reactor_object_t* dequeue_object;
-  fixed_queue_cb dequeue_ready;
-  void* dequeue_context;
-} fixed_queue_t;
+#include "fixed_queue.h"
 
 
 FixedQueue::FixedQueue(size_t capacity)
@@ -45,16 +34,18 @@ FixedQueue::~FixedQueue() {
     Free();
 }
 
-void FixedQueue::Flush() {
+void FixedQueue::Flush(fixed_queue_free_cb free_cb) {
+    while (!IsEmpty()) {
+        void* data = TryDequeue();
+        if (free_cb) free_cb(data);
+    }
 }
 
 bool FixedQueue::IsEmpty() {
-    std::lock_guard<std::mutex> lock(m_mutex);
     return m_pList->IsEmpty();
 }
 
 size_t FixedQueue::GetLength() {
-    std::lock_guard<std::mutex> lock(m_mutex);
     return m_pList->Length();
 }
 
@@ -62,10 +53,7 @@ void FixedQueue::Enqueue(void* data) {
     CHECK(data != NULL);
     
     m_pEnqueueEvt->Wait();
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_pList->Append(data);
-    }
+    m_pList->Append(data);     
     m_pDequeueEvt->Post();
 }
 
@@ -73,21 +61,18 @@ void* FixedQueue::Dequeue() {
     m_pDequeueEvt->Wait();
     
     void* ret = NULL;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        ret = m_pList->Pop();        
-    }
-    m_pEnqueueEvt->Post();
+    ret = m_pList->Front();
+    m_pList->Remove(ret);
     
+    m_pEnqueueEvt->Post();
+        
     return ret;
 }
 
 bool FixedQueue::TryEnqueue(void* data) {
-    if (!m_pEnqueueEvt->TryWait()) return false;        
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_pList->Append(data);
-    }
+    if (!m_pEnqueueEvt->TryWait()) return false; 
+    
+    m_pList->Append(data);
     m_pDequeueEvt->Post();
     
     return true;
@@ -97,35 +82,29 @@ void* FixedQueue::TryDequeue() {
     if (!m_pDequeueEvt->TryWait()) return NULL;
     
     void* ret = NULL;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        ret = m_pList->Pop();        
-    }
+    ret = m_pList->Front();
+    m_pList->Remove(ret);
+
     m_pEnqueueEvt->Post();
     
     return ret;
 }
 
 void* FixedQueue::PeekFirst() {
-    std::lock_guard<std::mutex> lock(m_mutex);
     return m_pList->IsEmpty() ? NULL : m_pList->Front();
 }
 
 void* FixedQueue::PeekLast() {
-    std::lock_guard<std::mutex> lock(m_mutex);
     return m_pList->IsEmpty() ? NULL : m_pList->Last();
 }
 
 void* FixedQueue::Remove(void* data) {
     bool removed = false;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_pList->Contains(data) &&
-           m_pDequeueEvt->TryWait()) {
-            removed = m_pList->Remove(data); 
-        }
-    }
     
+    if (m_pList->Contains(data) &&
+        m_pDequeueEvt->TryWait()) {
+        removed = m_pList->Remove(data); 
+    }    
     if (removed) m_pEnqueueEvt->Post();
 
     return removed ? data : NULL;
@@ -139,18 +118,9 @@ int FixedQueue::GetEnqueueFd() {
     return m_pEnqueueEvt->GetFd();
 }
 
-void FixedQueue::RegisterDequeue(fixed_queue_cb ready_cb, void* context) {
-    m_pfnDequeuReady = ready_cb;
-    m_pDequeueContext = context;
-}
-
-void FixedQueue::DeregisterDequeue() {
-}
-
-
 void FixedQueue::New(size_t capacity) {
     m_capacity = capacity;
-    m_pList = new List(NULL);
+    m_pList = new SeqList(NULL);
     m_pEnqueueEvt = new Event(capacity);
     m_pDequeueEvt = new Event(0);    
     
@@ -160,9 +130,7 @@ void FixedQueue::New(size_t capacity) {
 }
 
 void FixedQueue::Free() {
-    m_capacity = 0;
-    
-    DeregisterDequeue();
+    m_capacity = 0;    
     
     if (m_pList) {
         delete m_pList;
@@ -176,11 +144,4 @@ void FixedQueue::Free() {
         delete m_pDequeueEvt;
         m_pDequeueEvt = NULL;
     }
-}
-
-static void internal_dequeue_ready(void* context) {
-  CHECK(context != NULL);
-    
-  FixedQueue* queue = static_cast<FixedQueue*>(context);
-  queue->dequeue_ready(queue, queue->dequeue_context);
 }
