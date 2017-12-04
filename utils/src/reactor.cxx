@@ -62,9 +62,11 @@ Reactor::~Reactor() {
 void Reactor::New() {
     m_epollFd = epoll_create(MAX_EVENTS);
     m_eventFd = eventfd(0, 0); 
+    m_invalidList = new SeqList(NULL);
     
     CHECK(m_epollFd != INVALID_FD);
     CHECK(m_eventFd != INVALID_FD);
+    CHECK(m_invalidList != NULL);
     
     struct epoll_event event;
     memset(&event, 0, sizeof(event));
@@ -86,6 +88,10 @@ void Reactor::Free() {
     if (m_eventFd != INVALID_FD) {
         close(m_eventFd);
         m_eventFd = INVALID_FD;
+    }
+    if (m_invalidList != NULL) {
+        delete m_invalidList;
+        m_invalidList = NULL;
     }
 }
 
@@ -131,9 +137,7 @@ reactor_object_t* Reactor::Register(int fd, void* context, ready_cb pfnRead, rea
 void Reactor::Unregister(reactor_object_t* obj) {
     CHECK(obj != NULL);
 
-    Reactor* reactor = obj->reactor;
-    
-    CHECK(this == reactor);
+    Reactor* reactor = obj->reactor;    
 
     if (epoll_ctl(m_epollFd, EPOLL_CTL_DEL, obj->fd, NULL) == -1)
         LOG_ERROR(LOG_TAG, "%s unable to unregister fd %d from epoll set: %s",
@@ -159,7 +163,7 @@ void Reactor::Unregister(reactor_object_t* obj) {
     obj->mutex->lock();
     obj->mutex->unlock();
     delete obj->mutex;
-    sis_free(obj);
+    sys_free(obj);
 }
 
 // Runs the reactor loop for a maximum of |iterations|.
@@ -167,58 +171,58 @@ void Reactor::Unregister(reactor_object_t* obj) {
 // |reactor| may not be NULL.
 reactor_status_t Reactor::Run(int iterations) {
 
-  m_runThread = pthread_self();
-  m_isRunning = true;
+    m_runThread = pthread_self();
+    m_isRunning = true;
 
-  struct epoll_event events[MAX_EVENTS];
-  for (int i = 0; iterations == 0 || i < iterations; ++i) {
-      if (m_invalidList != NULL) m_invalidList->Clear();
-    
+    struct epoll_event events[MAX_EVENTS];
+    for (int i = 0; iterations == 0 || i < iterations; ++i) {
+        if (m_invalidList != NULL) m_invalidList->Clear();
 
-    int ret;
-    OSI_NO_INTR(ret = epoll_wait(reactor->epoll_fd, events, MAX_EVENTS, -1));
-    if (ret == -1) {
-      LOG_ERROR(LOG_TAG, "%s error in epoll_wait: %s", __func__,
-                strerror(errno));
-      m_isRunning = false;
-      return REACTOR_STATUS_ERROR;
+        int ret;
+        OSI_NO_INTR(ret = epoll_wait(reactor->epoll_fd, events, MAX_EVENTS, -1));
+        if (ret == -1) {
+            LOG_ERROR(LOG_TAG, "%s error in epoll_wait: %s", __func__,
+                    strerror(errno));
+            m_isRunning = false;
+            return REACTOR_STATUS_ERROR;
+        }
+
+        for (int j = 0; j < ret; ++j) {
+            // The event file descriptor is the only one that registers with
+            // a NULL data pointer. We use the NULL to identify it and break
+            // out of the reactor loop.
+            if (events[j].data.ptr == NULL) {
+                eventfd_t value;
+                eventfd_read(reactor->event_fd, &value);
+                m_isRunning = false;
+                return REACTOR_STATUS_STOP;
+            }
+
+            reactor_object_t* object = (reactor_object_t*)events[j].data.ptr;
+            Reactor* reactor = object->reactor;
+            if (m_invalidList->Contains(object)) continue;    
+
+            // Downgrade the list lock to an object lock.
+            {
+                std::lock_guard<std::mutex> obj_lock(*object->mutex);
+
+                reactor->m_isObjectRemoved = false;
+                if (events[j].events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR) &&
+                        object->read_ready)
+                    object->read_ready(object->context);
+                if (!reactor->m_isObjectRemoved && events[j].events & EPOLLOUT &&
+                        object->write_ready)
+                    object->write_ready(object->context);
+            }
+
+            if (reactor->m_isObjectRemoved) {
+                delete object->mutex;
+                sys_free(object);
+            }
+        }
     }
 
-    for (int j = 0; j < ret; ++j) {
-      // The event file descriptor is the only one that registers with
-      // a NULL data pointer. We use the NULL to identify it and break
-      // out of the reactor loop.
-      if (events[j].data.ptr == NULL) {
-        eventfd_t value;
-        eventfd_read(reactor->event_fd, &value);
-        m_isRunning = false;
-        return REACTOR_STATUS_STOP;
-      }
-
-      reactor_object_t* object = (reactor_object_t*)events[j].data.ptr;
-        if (m_invalidList->Contains(object)) continue;    
-
-      // Downgrade the list lock to an object lock.
-      {
-        std::lock_guard<std::mutex> obj_lock(*object->mutex);
-
-        reactor->m_isObjectRemoved = false;
-        if (events[j].events & (EPOLLIN | EPOLLHUP | EPOLLRDHUP | EPOLLERR) &&
-            object->read_ready)
-          object->read_ready(object->context);
-        if (!reactor->m_isObjectRemoved && events[j].events & EPOLLOUT &&
-            object->write_ready)
-          object->write_ready(object->context);
-      }
-
-      if (reactor->m_isObjectRemoved) {
-        delete object->mutex;
-        sys_free(object);
-      }
-    }
-  }
-
-  m_isObjectRemoved = false;
-  return REACTOR_STATUS_DONE;
+    m_isObjectRemoved = false;
+    return REACTOR_STATUS_DONE;
 }
 
