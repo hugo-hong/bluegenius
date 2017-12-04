@@ -169,7 +169,7 @@ void* Thread::Run(void* arg) {
     entry->entry_evt->Post();
     //entry->entry_evt has been free, cannot use it anymore
 
-    int fd = m_pWorkQueue->GetDequeue(); 
+    int fd = m_pWorkQueue->GetDequeueFd(); 
     void* context = m_pWorkQueue;
 
     reactor_object_t* work_queue_object = m_pReactor->Register(fd, context, work_queue_read_cb, NULL);
