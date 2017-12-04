@@ -20,19 +20,20 @@
 #ifndef _FIXED_QUEUE_H_
 #define _FIXED_QUEUE_H_
 
-typedef void (*fixed_queue_cb)(FixedQueue* queue, void* context);
+#include "seqlist.h"
 
+typedef void (*fixed_queue_free_cb)(void* data);
 
 class FixedQueue {
 public:
     FixedQueue(size_t capacity);
     ~FixedQueue();
     
-    void Flush();
+    void Flush(fixed_queue_free_cb free_cb = NULL);
     bool IsEmpty();
     size_t GetLength();
     size_t GetCapcity() {return m_capacity;}
-    List* GetList() {return m_pList;}
+    SeqList* GetList() {return m_pList;}
     void Enqueue(void* data);
     void* Dequeue();
     bool TryEnqueue(void* data);
@@ -42,24 +43,16 @@ public:
     void* Remove(void* data);
     int GetEnqueueFd();
     int GetDequeueFd();
-    void RegisterDequeue(fixed_queue_cb ready_cb, void* context);
-    void DeregisterDequeue();
-    
+   
 protected:
     void New(size_t capacity);
-    void Free();
-    
-    friend static void internal_dequeue_ready(void* context);
+    void Free();    
     
 private:
-    List* m_pList;
+    SeqList* m_pList;
     Event* m_pEnqueueEvt;
     Event* m_pDequeueEvt;
-    std::mutex m_mutex;
-    size_t m_capacity;
-    
-    fixed_queue_cb m_pfnDequeuReady;
-    void* m_pDequeueContext;
+    size_t m_capacity;    
 }
 
 #endif //_FIXED_QUEUE_H_
