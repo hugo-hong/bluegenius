@@ -51,8 +51,7 @@ public:
 protected:
     void New();
     void Free();
-    list_node_t* FreeNode(list_node_t* node);
-    
+    list_node_t* FreeNode(list_node_t* node);    
     
 private:
     std::mutex* m_mutex;
