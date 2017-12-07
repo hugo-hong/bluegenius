@@ -49,24 +49,7 @@ typedef struct {
   stat_t premature_scheduling;
 } alarm_stats_t;
 
-struct alarm_t {
-  // The mutex is held while the callback for this alarm is being executed.
-  // It allows us to release the coarse-grained monitor lock while a
-  // potentially long-running callback is executing. |alarm_cancel| uses this
-  // mutex to provide a guarantee to its caller that the callback will not be
-  // in progress when it returns.
-  std::recursive_mutex* callback_mutex;
-  uint64_t creation_time;
-  uint64_t period;
-  uint64_t deadline;
-  uint64_t prev_deadline;  // Previous deadline - used for accounting of
-                              // periodic timers
-  bool is_periodic;
-  fixed_queue_t* queue;  // The processing queue to add this alarm to
-  alarm_callback_t callback;
-  void* data;
-  alarm_stats_t stats;
-};
+
 
 // If the next wakeup time is less than this threshold, we should acquire
 // a wakelock instead of setting a wake alarm so we're not bouncing in
@@ -92,9 +75,126 @@ static event_t* alarm_expired;
 static thread_t* default_callback_thread;
 static fixed_queue_t* default_callback_queue;
 
-alarm_t* alarm_new(const char* name, bool is_periodic) { 
-   return alarm_new_internal(name, is_periodic); 
+
+Alarm::Alarm(const char* name, bool is_periodic)
+    :m_creation_time(0)
+    ,m_period(0)
+    ,m_deadline(0)
+    ,m_prev_deadline(0)
+    ,m_isPeriodic(false)
+    ,m_queue(NULL)
+    ,m_callback(NULL)
+    ,m_data(NULL)
+    ,m_mutex(NULL)
+    ,m_alarmList(NULL)
+{
+    New(name, is_periodic);
 }
+
+bool Alarm::CreateTimer(const clockid_t clock_id, timer_t* timer) {
+    CHECK(timer == NULL);
+    
+    //create timer with rt priority thread
+    pthread_attr_t thread_attr;
+    pthread_attr_init(&thread_attr);
+    pthread_attr_setschedpolicy(&thread_attr, SCHED_FIFO);
+    struct sched_param param;
+    param.sched_priority = THREAD_RT_PRIORITY;
+    pthread_attr_setschedparam(&thread_attr, &param);
+    
+    struct sigevent sigevt;
+    memset(&sigevt, 0, sizeof(sigevt));
+    sigevt.sigev_notify = SIGEV_THREAD;
+    sigevent.sigev_notify_function = (void (*)(union sigval))timer_callback;
+
+}
+
+
+bool Alarm::lazy_initialize(void) {
+    CHECK(m_alarmList == NULL);
+
+    // timer_t doesn't have an invalid value so we must track whether
+    // the |timer| variable is valid ourselves.
+    bool timer_initialized = false;
+    bool wakeup_timer_initialized = false;
+    
+    std::lock_guard<std::mutex> lock(m_mutex);
+    
+    m_alarmList = new SeqList(NULL);
+    if (NULL == m_alarmList) {
+        LOG_ERROR(LOG_TAG, "%s unable to allocate alarm list.", __func__);
+        goto error;
+    }
+    
+    
+
+
+    
+    if (!timer_create_internal(CLOCK_ID, &timer)) goto error;
+    timer_initialized = true;
+
+    if (!timer_create_internal(CLOCK_ID_ALARM, &wakeup_timer)) goto error;
+    wakeup_timer_initialized = true;
+
+    alarm_expired = event_new(0);
+    if (!alarm_expired) {
+    LOG_ERROR(LOG_TAG, "%s unable to create alarm expired semaphore", __func__);
+    goto error;
+    }
+
+    default_callback_thread =
+      thread_new_sized("alarm_default_callbacks", SIZE_MAX);
+    if (default_callback_thread == NULL) {
+    LOG_ERROR(LOG_TAG, "%s unable to create default alarm callbacks thread.",
+              __func__);
+    goto error;
+    }
+    thread_set_rt_priority(default_callback_thread, THREAD_RT_PRIORITY);
+    default_callback_queue = fixed_queue_new(SIZE_MAX);
+    if (default_callback_queue == NULL) {
+    LOG_ERROR(LOG_TAG, "%s unable to create default alarm callbacks queue.",
+              __func__);
+    goto error;
+    }
+    alarm_register_processing_queue(default_callback_queue,
+                                  default_callback_thread);
+
+    dispatcher_thread_active = true;
+    dispatcher_thread = thread_new("alarm_dispatcher");
+    if (!dispatcher_thread) {
+    LOG_ERROR(LOG_TAG, "%s unable to create alarm callback thread.", __func__);
+    goto error;
+    }
+    thread_set_rt_priority(dispatcher_thread, THREAD_RT_PRIORITY);
+    thread_post(dispatcher_thread, callback_dispatch, NULL);
+    return true;
+
+    error:
+    fixed_queue_free(default_callback_queue, NULL);
+    default_callback_queue = NULL;
+    thread_free(default_callback_thread);
+    default_callback_thread = NULL;
+
+    thread_free(dispatcher_thread);
+    dispatcher_thread = NULL;
+
+    dispatcher_thread_active = false;
+
+    semaphore_free(alarm_expired);
+    alarm_expired = NULL;
+
+    if (wakeup_timer_initialized) timer_delete(wakeup_timer);
+
+    if (timer_initialized) timer_delete(timer);
+
+    list_free(alarms);
+    alarms = NULL;
+
+    return false;
+}
+
+
+
 
 static alarm_t* alarm_new_internal(const char* name, bool is_periodic) {
   // Make sure we have a list we can insert alarms into.
