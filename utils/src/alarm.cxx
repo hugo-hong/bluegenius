@@ -105,7 +105,24 @@ bool Alarm::CreateTimer(const clockid_t clock_id, timer_t* timer) {
     struct sigevent sigevt;
     memset(&sigevt, 0, sizeof(sigevt));
     sigevt.sigev_notify = SIGEV_THREAD;
-    sigevent.sigev_notify_function = (void (*)(union sigval))timer_callback;
+    sigevent.sigev_notify_function = (void (*)(union sigval))timer_callback;  
+    if (timer_create(clock_id, &sigevt, timer) == -1) {
+        LOG_ERROR(LOG_TAG, "%s unable to create timer with clock %d: %s", __func__,
+                  clock_id, strerror(errno));
+        if (clock_id == CLOCK_BOOTTIME_ALARM) {
+          LOG_ERROR(LOG_TAG,
+                    "The kernel might not have support for "
+                    "timer_create(CLOCK_BOOTTIME_ALARM): "
+                    "https://lwn.net/Articles/429925/");
+          LOG_ERROR(LOG_TAG,
+                    "See following patches: "
+                    "https://git.kernel.org/cgit/linux/kernel/git/torvalds/"
+                    "linux.git/log/?qt=grep&q=CLOCK_BOOTTIME_ALARM");
+        }
+        return false;
+  }
+
+  return true;
 
 }
 
