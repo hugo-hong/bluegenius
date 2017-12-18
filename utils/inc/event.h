@@ -22,7 +22,7 @@
 
 class Event {
 public:
-    Event();
+    Event(int value);
     ~Event();
     
     void Wait();
@@ -31,7 +31,7 @@ public:
     int GetFd() {return m_fd;}
     
 protected:
-    void New();
+    void New(int value);
     void Free();
     
 private:
