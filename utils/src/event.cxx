@@ -32,10 +32,10 @@
 #endif
 
 
-Event::Event()
+Event::Event(int value)
     :m_fd(INVALID_FD)
 {
-    New();
+    New(value);
 }
 
 Event::~Event() {
@@ -77,7 +77,7 @@ void Event::Post() {
             strerror(errno));
 }
 
-void Event::New() {
+void Event::New(int value) {
     CHECK(m_fd == INVALID_FD);
     m_fd = eventfd(value, EFD_SEMAPHORE);
 }
