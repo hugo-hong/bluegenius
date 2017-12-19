@@ -100,6 +100,12 @@ bool Alarm::CreateTimer(const clockid_t clock_id, timer_t* timer) {
 
 }
 
+void Alarm::New(const char* name, bool is_periodic) {
+    CHECK(lazy_initialize());
+    
+    m_isPeriodic = is_periodic;
+}
+
 
 bool Alarm::lazy_initialize(void) {
     CHECK(m_alarmList == NULL);
@@ -125,13 +131,67 @@ bool Alarm::lazy_initialize(void) {
     
     m_alarmExpired = new Event(0);
     
+    //callback thread
+    m_callbackThread = new Thread("alarm_default_callbacks", SIZE_MAX);
+    m_callbackThread->SetRTPriority(THREAD_RT_PRIORITY);
+    m_callbackQueue = new FixedQueue(SIZE_MAX);
+    m_callbackThread->GetReactor()->Register(m_callbackQueue->GetFd(), m_callbackQueue,  alarm_queue_ready, NULL);
+    
+    //dispatch thread
+    m_dispatchThreadActive = true;
+    m_dispatchThread = new Thread("alarm_dispatcher");
+    m_dispatchThread->SetRTPriority(THREAD_RT_PRIORITY);
+    m_dispatchThread->Post(callback_dispatch, this);
 
     return true;
 error:
+    if (m_alarmList != NULL) delete m_alarmList;
+    if (m_callbackThread != NULL) delete m_callbackThread;
+    if (m_dispatchThread != NULL) delete m_dispatchThread;
     return false;
 }
 
+// Function running on |dispatcher_thread| that performs the following:
+//   (1) Receives a signal using |alarm_exired| that the alarm has expired
+//   (2) Dispatches the alarm callback for processing by the corresponding
+// thread for that alarm.
+static void callback_dispatch(void* context) {
+    Alarm* alarm = static_cast<Alarm*>context;
+    CHECK(alarm != NULL);
+  while (true) {
+      
+    if (alarm->m_alarmExpired != NULL) alarm->m_alarmExpired->Wait();
+      
+    semaphore_wait(alarm_expired);
+    if (!dispatcher_thread_active) break;
 
+    std::lock_guard<std::mutex> lock(alarms_mutex);
+    alarm_t* alarm;
+
+    // Take into account that the alarm may get cancelled before we get to it.
+    // We're done here if there are no alarms or the alarm at the front is in
+    // the future. Exit right away since there's nothing left to do.
+    if (list_is_empty(alarms) ||
+        (alarm = static_cast<alarm_t*>(list_front(alarms)))->deadline > now()) {
+      reschedule_root_alarm();
+      continue;
+    }
+
+    list_remove(alarms, alarm);
+
+    if (alarm->is_periodic) {
+      alarm->prev_deadline = alarm->deadline;
+      schedule_next_instance(alarm);
+      alarm->stats.rescheduled_count++;
+    }
+    reschedule_root_alarm();
+
+    // Enqueue the alarm for processing
+    fixed_queue_enqueue(alarm->queue, alarm);
+  }
+
+  LOG_DEBUG(LOG_TAG, "%s Callback thread exited", __func__);
+}
 
 
 
