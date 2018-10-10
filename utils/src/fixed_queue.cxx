@@ -18,14 +18,17 @@
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
 #include <mutex>
-#include "fixed_queue.h"
 
+#include "utils.h"
+#include "event.h"
+#include "seqlist.h"
+#include "fixed_queue.h"
 
 FixedQueue::FixedQueue(size_t capacity)
     :m_capacity(0)
-    ,m_pList(NULL)
-    ,m_pEnqueueEvt(NULL)
-    ,m_pDequeueEvt(NULL)
+    ,m_list(NULL)
+    ,m_enqueue_evt(NULL)
+    ,m_dequeue_evt(NULL)
 {
    New(capacity);
 }
@@ -41,107 +44,119 @@ void FixedQueue::Flush(fixed_queue_free_cb free_cb) {
     }
 }
 
-bool FixedQueue::IsEmpty() {
-    return m_pList->IsEmpty();
-}
-
-size_t FixedQueue::GetLength() {
-    return m_pList->Length();
-}
-
 void FixedQueue::Enqueue(void* data) {
     CHECK(data != NULL);
     
-    m_pEnqueueEvt->Wait();
-    m_pList->Append(data);     
-    m_pDequeueEvt->Post();
+	m_enqueue_evt->Wait();
+    m_list->Append(data);     
+    m_dequeue_evt->Post();
 }
 
 void* FixedQueue::Dequeue() {
-    m_pDequeueEvt->Wait();
+    m_dequeue_evt->Wait();
     
     void* ret = NULL;
-    ret = m_pList->Front();
-    m_pList->Remove(ret);
+    ret = m_list->Front();
+    m_list->Remove(ret);
     
-    m_pEnqueueEvt->Post();
+    m_enqueue_evt->Post();
         
     return ret;
 }
 
 bool FixedQueue::TryEnqueue(void* data) {
-    if (!m_pEnqueueEvt->TryWait()) return false; 
+    if (!m_enqueue_evt->TryWait()) 
+		return false; 
     
-    m_pList->Append(data);
-    m_pDequeueEvt->Post();
+    m_list->Append(data);
+    m_dequeue_evt->Post();
     
     return true;
 }
 
 void* FixedQueue::TryDequeue() {
-    if (!m_pDequeueEvt->TryWait()) return NULL;
+    if (!m_dequeue_evt->TryWait()) return NULL;
     
     void* ret = NULL;
-    ret = m_pList->Front();
-    m_pList->Remove(ret);
+    ret = m_list->Front();
+    m_list->Remove(ret);
 
-    m_pEnqueueEvt->Post();
+    m_enqueue_evt->Post();
     
     return ret;
 }
 
 void* FixedQueue::PeekFirst() {
-    return m_pList->IsEmpty() ? NULL : m_pList->Front();
+    return m_list->IsEmpty() ? NULL : m_list->Front();
 }
 
 void* FixedQueue::PeekLast() {
-    return m_pList->IsEmpty() ? NULL : m_pList->Last();
+    return m_list->IsEmpty() ? NULL : m_list->Last();
+}
+
+void FixedQueue::Push(void* data) {
+	CHECK(data != NULL);
+
+	m_enqueue_evt->Wait();
+	m_list->Insert(data, NULL);
+	m_dequeue_evt->Post();
+}
+
+void* FixedQueue::Pull() {
+	m_dequeue_evt->Wait();
+
+	void* ret = NULL;
+	ret = m_list->Last();
+	m_list->Remove(ret);
+	m_enqueue_evt->Post();
+
+	return ret;
 }
 
 void* FixedQueue::Remove(void* data) {
     bool removed = false;
     
-    if (m_pList->Contains(data) &&
-        m_pDequeueEvt->TryWait()) {
-        removed = m_pList->Remove(data); 
+    if (m_list->Contains(data) &&
+        m_dequeue_evt->TryWait()) {
+        removed = m_list->Remove(data); 
     }    
-    if (removed) m_pEnqueueEvt->Post();
+    if (removed) m_enqueue_evt->Post();
 
     return removed ? data : NULL;
 }
 
 int FixedQueue::GetDequeueFd() {
-    return m_pDequeueEvt->GetFd();
+    return m_dequeue_evt->GetFd();
 }
 
 int FixedQueue::GetEnqueueFd() {
-    return m_pEnqueueEvt->GetFd();
+    return m_enqueue_evt->GetFd();
 }
 
 void FixedQueue::New(size_t capacity) {
     m_capacity = capacity;
-    m_pList = new SeqList(NULL);
-    m_pEnqueueEvt = new Event(capacity);
-    m_pDequeueEvt = new Event(0);    
+    m_list = new SeqList(NULL);
+    m_enqueue_evt = new Event(capacity);
+    m_dequeue_evt = new Event(0);    
     
-    CHECK(m_pList != NULL);
-    CHECK(m_pEnqueueEvt != NULL);
-    CHECK(m_pDequeueEvt != NULL);
+    CHECK(m_list != NULL);
+    CHECK(m_enqueue_evt != NULL);
+    CHECK(m_dequeue_evt != NULL);
 }
 
 void FixedQueue::Free() {
     m_capacity = 0;    
     
-    if (m_pList) {
-        delete m_pList;
-        m_pList = NULL;
+    if (m_list) {
+        delete m_list;
+        m_list = NULL;
     }
-    if (m_pEnqueueEvt) {
-        delete m_pEnqueueEvt;
-        m_pEnqueueEvt = NULL;
+    if (m_enqueue_evt) {
+        delete m_enqueue_evt;
+        m_enqueue_evt = NULL;
     }
-    if (m_pDequeueEvt) {
-        delete m_pDequeueEvt;
-        m_pDequeueEvt = NULL;
+    if (m_dequeue_evt) {
+        delete m_dequeue_evt;
+        m_dequeue_evt = NULL;
     }
 }

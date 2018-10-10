@@ -17,35 +17,36 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
-
 #include <errno.h>
 #include <malloc.h>
+
+#include "utils.h"
+#include "allocator.h"
 
 inline size_t allocator_resize(size_t size) {
 	return((size + 3) & 0xfffffffc);
 }
 
 void* sys_malloc(size_t size) {
-  size_t real_size = allocator_resize(size);
-  return malloc(real_size);  
+	size_t real_size = allocator_resize(size);
+	return malloc(real_size);  
 }
 
 void* sys_calloc(size_t size) {
-  size_t real_size = allocator_resize(size);
-  return calloc(1, real_size); 
+	size_t real_size = allocator_resize(size);
+	return calloc(1, real_size); 
 }
 
 void sys_free(void* ptr) {
-  CHECK(p_ptr != NULL);
-  free(ptr);
+	CHECK(ptr != NULL);
+	free(ptr);
 }
 
 void sys_free_and_reset(void** p_ptr) {
-  CHECK(p_ptr != NULL);
-  sys_free(*p_ptr);
-  *p_ptr = NULL;
+	CHECK(p_ptr != NULL);
+	sys_free(*p_ptr);
+	*p_ptr = NULL;
 }
 
 const allocator_t allocator_calloc = {sys_calloc, sys_free};
-
 const allocator_t allocator_malloc = {sys_malloc, sys_free};

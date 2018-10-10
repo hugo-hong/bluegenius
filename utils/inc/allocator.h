@@ -1,7 +1,7 @@
 /*********************************************************************************
    Bluegenius - Bluetooth host protocol stack for Linux/android/windows...
-   Copyright (C) 
-   Written 2017 by hugoï¼ˆyongguang hongï¼‰ <hugo.08@163.com>
+   Copyright (C)
+   Written 2017 by hugo£¨yongguang hong£© <hugo.08@163.com>
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
    published by the Free Software Foundation;
@@ -16,26 +16,26 @@
    ALL LIABILITY, INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PATENTS,
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
-*********************************************************************************/ 
-#ifndef _UTILS_EVENT_H_
-#define _UTILS_EVENT_H_
+*********************************************************************************/
+#ifndef _UTILS_ALLOCATOR_H_
+#define _UTILS_ALLOCATOR_H_
 
-class Event {
-public:
-	Event(int value);
-    ~Event();
-    
-    int Wait();
-    bool TryWait();
-    int Post();
-    int GetFd() {return m_fd;}
-    
-protected:
-    void New(int value);
-    void Free();
-    
-private:
-    int m_fd;
-};
+#include <stdlib.h>
 
-#endif //_UTILS_EVENT_H_
+typedef void* (*alloc_fn)(size_t size);
+typedef void (*free_fn)(void* ptr);
+
+typedef struct {
+	alloc_fn alloc;
+	free_fn free;
+} allocator_t;
+
+
+void* sys_malloc(size_t size);
+void* sys_calloc(size_t size);
+void sys_free(void* ptr);
+
+
+
+
+#endif //_UTILS_ALLOCATOR_H_

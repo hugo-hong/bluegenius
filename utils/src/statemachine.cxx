@@ -17,138 +17,105 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
-
 #define LOG_TAG "statemachine"
 
+#include "utils.h"
+#include "callback.h"
+#include "thread.h"
+#include "seqlist.h"
+#include "fixed_queue.h"
+#include "reactor.h"
+#include "allocator.h"
 #include "statemachine.h"
 
-StateMachine :: StateMachine() {  
-  m_curState = SM_INVALID_STATE;
-  m_destState = SM_INVALID_STATE;
-  m_pMainThread = NULL;
-  m_pCurMessageQueue = NULL;
-  m_pDefMessageList = NULL;
+StateMachine :: StateMachine() 
+	: m_curstate(SM_INVALID_STATE)
+	, m_desstate(SM_INVALID_STATE)	
+	, m_thread(NULL)
+	, m_defermessages(NULL)
+{    
 }
 
-StateMachine :: ~StateMachine() {
-	
+StateMachine :: ~StateMachine() {	
 }
 
 void StateMachine :: Start(int priority) {
-  m_pMainThread = thread_new("sm_engine");
-    if (NULL == m_pMainThread) {
-    LOG_ERROR(LOG_TAG, "%s unable to create sm main thread", __func__);
-    return;
-  }
+	m_thread = new Thread("sm_engine");
+	m_defermessages = new SeqList(NULL);
+	CHECK(m_thread != NULL && m_defermessages != NULL);
+	m_thread->SetPriority(priority);
+   
 
-  m_pCurMessageQueue = fixed_queue_new(SIZE_MAX);
-  m_pDefMessageList = list_new(NULL);
-  fixed_queue_register_dequeue(
-    m_pCurMessageQueue,
-    thread_get_reactor(m_pMainThread),
-    StateMachine::HandleMessage, this);  
-
-  thread_set_rt_priority(m_pMainThread, priority);
 }
 
 void StateMachine :: Stop(void) {
-  fixed_queue_unregister_dequeue(m_pCurMessageQueue);
-  fixed_queue_free(m_pCurMessageQueue);
-  list_free(m_pDefMessageList);
-  thread_free(m_pMainThread);
+
 }
 
 void StateMachine :: AddState(SM_State_T state) {
-  REGISTER_CALLBACK(StateMachine, state.state, this, state.pfnProcessMessage, m_stateHandler);
+  REGISTER_CALLBACK(StateMachine, state.state, this, state.messagehandler, m_statehandler);
 }
 
 void StateMachine :: RemoveState(SM_State_T state) {
-  DEREGISTER_CALLBACK(state.state, m_stateHandler);
+  DEREGISTER_CALLBACK(state.state, m_statehandler);
 }
 
-void StateMachine :: SetState(int state) {
-  m_destState = state;
-  if (SM_INVALID_STATE == m_curState) {
-    SM_MSG_T *pMsg = (SM_MSG_T*)sys_malloc(sizeof(SM_MSG_T));
-    pMsg->msg_id = SM_MSG_TOGGLE_STATE;
-    fixed_queue_try_enqueue(m_pCurMessageQueue, pMsg);
-  }
-  
+void StateMachine ::TransitionTo(int state) {
+	m_desstate = state;   
 }
 
-void StateMachine :: GetState(int state) {
-  return m_curState;
+int StateMachine :: GetState(void) {
+  return m_curstate;
 }
 
 void StateMachine :: SendMessage(uint32_t msg_id,  uint32_t len, void * param) { 
-  SM_MSG_T *pMsg = (SM_MSG_T*)sys_malloc(sizeof(SM_MSG_T) + len);;
+	SM_MSG_T *msg = (SM_MSG_T*)sys_malloc(sizeof(SM_MSG_T) + len);;
   
-  pMsg->msg_id = msg_id;
-  pMsg->u4Size = len;
-  if (len > 0 && param != NULL) {
-    memcpy(pMsg->param, param, len);    
-  }
-
-  fixed_queue_enqueue(m_pCurMessageQueue, pMsg);
+	msg->msg_id = msg_id;
+	msg->u4Size = len;
+	if (len > 0 && param != NULL) {
+		memcpy(msg->param, param, len);
+	}
+	m_thread->Post((thread_fn)StateMachine::ProcessMessage, msg);
 }
 
 void StateMachine :: DeferMessage(uint32_t msg_id,  uint32_t len, void * param) {  
-  SM_MSG_T *pMsg = (SM_MSG_T*)sys_malloc(sizeof(SM_MSG_T) + len);;
+	SM_MSG_T *msg = (SM_MSG_T*)sys_malloc(sizeof(SM_MSG_T) + len);;
   
-  pMsg->msg_id = msg_id;
-  pMsg->u4Size = len;
-  if (len > 0 && param != NULL) {
-    memcpy(pMsg->param, param, len);    
-  }
-  list_append(m_pDefMessageList, pMsg);
+	msg->msg_id = msg_id;
+	msg->u4Size = len;
+	if (len > 0 && param != NULL) {
+		memcpy(msg->param, param, len);
+	}
+	m_defermessages->Append(msg);
 }
 
 void StateMachine :: EnterState(int state) {  
-  INVOKE_CALLBACK(state, SM_MSG_STATE_ENTER, 0, NULL, m_stateHandler);
+	INVOKE_CALLBACK(state, SM_MSG_STATE_ENTER, 0, NULL, m_statehandler);
 }
 
 void StateMachine :: ExitState(int state) {  
-  INVOKE_CALLBACK(state, SM_MSG_STATE_EXIT, 0, NULL, m_stateHandler);
+	INVOKE_CALLBACK(state, SM_MSG_STATE_EXIT, 0, NULL, m_statehandler);
 }
 
-void StateMachine :: ToggleState(void) {  
-  if (m_destState != INVALID_STATE && 
-      m_destState != m_curState) {
-    doTransition();
-  }
+void StateMachine::Cleanup(void) {
+
 }
 
-void StateMachine :: DoTransition(void) {  
-  ExitState(m_curState);
-  m_curState = m_destState;
-  EnterState(m_destState);
-  m_destState = INVALID_STATE;
-  ProcessDeferdMessage();
-}
-
-void StateMachine :: ProcessDeferdMessage(void) {  
-  int len = list_length(m_pDefMessageList);
-  for (int = 0; i < len; i++) {
-    SM_MSG_T *pMsg = list_front(m_pDefMessageList);
-    fixed_queue_enqueue(m_pCurMessageQueue, pMsg);
-    list_remove(m_pDefMessageList, pMsg);
-  }
-}
-
-void StateMachine :: ProcessMessage(SM_MSG_T *pMsg) {  
-  CHECK(pMsg != NULL);
-
-  if (SM_MSG_TOGGLE_STATE != pMsg->msg_id) {
-    INVOKE_CALLBACK(m_curState, pMsg->msg_id, pMsg->u4Size, pMsg->param, m_stateHandler);
-  }
-	
-  ToggleState();
+void StateMachine ::PerformTransition(void) {
+	ExitState(m_curstate);
+	m_curstate = m_desstate;
+	EnterState(m_desstate);
+	m_desstate = SM_INVALID_STATE;
   
-  sys_free(pMsg);
 }
 
-void StateMachine :: HandleMessage(fixed_queue_t *queue, void* context) {  
-  StateMachine *pInstance = dynamic_cast<StateMachine*>(context);
-  CHECK(pInstance != NULL && queue != NULL);
-  pInstance->ProcessMessage((SM_MSG_T*)fixed_queue_dequeue(queue));
+
+
+void StateMachine :: ProcessMessage(void *context) {
+	CHECK(context != NULL);
+
+  
 }
+
+

@@ -17,18 +17,22 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
-#ifndef _THREAD_H_
-#define _THREAD_H_
+#ifndef _UTILS_THREAD_H_
+#define _UTILS_THREAD_H_
 
+#include <atomic>
 #include <stdbool.h>
 #include <stdlib.h>
 
 #define THREAD_NAME_MAX       		(16)//PR_SET_NAME limit max name length 16 bytes
 #define DEFAULT_WORK_QUEUE_CAPACITY (128)
 
-typedef void (*thread_fn)(void* context);
+typedef void(*thread_fn)(void* context);
 
-class Thread {
+class Reactor;
+class FixedQueue;
+
+class Thread {	 
 public:
 	Thread(const char* name, size_t size = DEFAULT_WORK_QUEUE_CAPACITY);
 	~Thread();
@@ -39,7 +43,8 @@ public:
 	bool SetPriority(int priority);
 	bool SetRTPriority(int priority);
 	bool IsSelf();	
-	Reactor* GetReactor() {return m_pReactor;}
+	Reactor* GetReactor() {return m_reactor;}
+	FixedQueue* GetWorkqueue() { return m_workqueue; }
 	const char* GetName() {return m_name;}
 	
 protected:
@@ -47,17 +52,16 @@ protected:
 	void Free();	
 	void* Run(void* arg);
 	
-	static void* run_thread(void* arg);
-	friend static void work_queue_read_cb(void* context);
+	static void* RunThread(void* arg);
+	static void WorkqueueReady(void* context);
 private:
-	std::atomic_bool m_isJoined;
-	pthread_t m_pthread;
+	std::atomic<bool> m_isjoined;
+	pthread_t m_thread;
 	pid_t m_tid;
 	char m_name[THREAD_NAME_MAX + 1];
-	Reactor* m_pReactor;
-	FixedQueue* m_pWorkQueue;
+	Reactor* m_reactor;
+	FixedQueue* m_workqueue;
+};
 
-}
 
-
-#endif //_THREAD_H_
+#endif //_UTILS_THREAD_H_

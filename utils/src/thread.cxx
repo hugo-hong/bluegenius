@@ -17,33 +17,40 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
-
-#define LOG_TAG "thread_proxy"
+#define LOG_TAG "bluegenius_utils_thread"
 
 #include <errno.h>
 #include <malloc.h>
 #include <pthread.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/prctl.h>
 
-#include"thread.h"
+#include "utils.h"
+#include "event.h"
+#include "seqlist.h"
+#include "reactor.h"
+#include "fixed_queue.h"
+#include "allocator.h"
+#include "thread.h"
+
+struct entry_arg {
+	Thread* thread;
+	Event* entry_evt;
+	int error;
+};
 
 typedef struct {
-  Thread* thread;
-  Event* entry_evt;
-  int error;
-}entry_arg;
-
-typedef struct {
-  thread_fn func;
-  void* context;
+	thread_fn func;
+	void* context;
 } work_item_t;
 
 Thread::Thread(const char* name, size_t size)
-    :m_isJoined(false)
-    ,m_pthread(NULL)
+    :m_isjoined(false)
+    ,m_thread(NULL)
     ,m_tid(-1)
-    ,m_pReactor(NULL)
-    ,m_pWorkQueue(NULL)
+    ,m_reactor(NULL)
+    ,m_workqueue(NULL)
 {       
     New(name, size);
 }
@@ -54,7 +61,7 @@ Thread::~Thread() {
 
 void Thread::Post(thread_fn func, void* context) {
     CHECK(func != NULL);
-    CHECK(m_pWorkQueue != NULL);
+    CHECK(m_workqueue != NULL);
     
     // TODO(sharvil): if the current thread == |thread| and we've run out
     // of queue space, we should abort this operation, otherwise we'll
@@ -65,17 +72,17 @@ void Thread::Post(thread_fn func, void* context) {
     work_item_t* item = (work_item_t*)sys_malloc(sizeof(work_item_t));
     item->func = func;
     item->context = context;
-    m_pWorkQueue->Enqueue(item); 
+    m_workqueue->Enqueue(item); 
 }
 
 void Thread::Stop() {
     //stop reactor
-    if (m_pReactor != NULL) m_pReactor->Stop();
+    if (m_reactor != NULL) m_reactor->Stop();
 }
 
 void Thread::Join() {
-    if (!std::atomic_exchange(&m_isJoined, true))
-        pthread_join(m_pthread, NULL);
+    if (!std::atomic_exchange(&m_isjoined, true))
+        pthread_join(m_thread, NULL);
 }
 
 void Thread::New(const char* name, size_t size) {
@@ -83,19 +90,19 @@ void Thread::New(const char* name, size_t size) {
     memset(m_name, 0, sizeof(m_name));
     strncpy(m_name, name, THREAD_NAME_MAX);
     
-    m_pReactor = new Reactor();
-    if (NULL == m_pReactor) goto error;
+    m_reactor = new Reactor();
+    if (NULL == m_reactor) goto error;
     
-    m_pWorkQueue = new FixedQueue(size);
-    if (NULL == m_pWorkQueue) goto error;
+    m_workqueue = new FixedQueue(size);
+    if (NULL == m_workqueue) goto error;
     
     // Start is on the stack, but we use a event, so it's safe
-    entry_arg arg;
+	entry_arg arg;
     arg.thread = this;
     arg.entry_evt = new Event(0);
     arg.error = 0;
     
-    pthread_create(&m_pthread, NULL, Thread::run_thread, &arg);
+    pthread_create(&m_thread, NULL, Thread::RunThread, &arg);
     
     arg.entry_evt->Wait();
     delete arg.entry_evt;
@@ -104,14 +111,14 @@ void Thread::New(const char* name, size_t size) {
     return;
     
 error:
-    free();
+	Free();
 }
 
 void Thread::Free() {
     Stop();
     Join();
-    if (m_pReactor) delete m_pReactor;
-    if (m_pWorkQueue) delete m_pWorkQueue;
+    if (m_reactor) delete m_reactor;
+    if (m_workqueue) delete m_workqueue;
 }
 
 bool Thread::SetPriority(int priority) {
@@ -120,8 +127,8 @@ bool Thread::SetPriority(int priority) {
     const int rc = setpriority(PRIO_PROCESS, m_tid, priority);
     if (rc < 0) {
         LOG_ERROR(LOG_TAG,
-            "%s unable to set thread priority %d for tid %d, error %d",
-            __func__, priority, m_tid, rc);
+            "unable to set thread priority %d for tid %d, error %d",
+            priority, m_tid, rc);
         return false;
     }
 
@@ -137,8 +144,8 @@ bool Thread::SetRTPriority(int priority) {
     const int rc = sched_setscheduler(m_tid, SCHED_FIFO, &rt_params);
     if (rc != 0) {
         LOG_ERROR(LOG_TAG,
-              "%s unable to set SCHED_FIFO priority %d for tid %d, error %s",
-              __func__, priority, m_tid, strerror(errno));
+              "unable to set SCHED_FIFO priority %d for tid %d, error %s",
+              priority, m_tid, strerror(errno));
         return false;
     }
 
@@ -146,16 +153,15 @@ bool Thread::SetRTPriority(int priority) {
 }
 
 bool Thread::IsSelf() {
-    CHECK(m_pthread != NULL);
-    return !!pthread_equal(pthread_self(), m_pthread);
+    CHECK(m_thread != NULL);
+    return !!pthread_equal(pthread_self(), m_thread);
 }
 
 void* Thread::Run(void* arg) {
-    struct entry_arg* entry = static_cast<entry_arg*>(arg);    
+    entry_arg* entry = static_cast<entry_arg*>(arg);    
 
     if (prctl(PR_SET_NAME, (unsigned long)m_name) == -1) {
-        LOG_ERROR(LOG_TAG, "%s unable to set thread name: %s", __func__,
-              strerror(errno));
+        LOG_ERROR(LOG_TAG, "unable to set thread name: %s", strerror(errno));
         entry->error = errno;
         entry->entry_evt->Post();
         return NULL;
@@ -163,48 +169,47 @@ void* Thread::Run(void* arg) {
     
     m_tid = gettid();
 
-    LOG_INFO(LOG_TAG, "%s: thread id %d, thread name %s started", __func__,
-           m_tid, m_name);
+	LOG_TRACE(LOG_TAG, "thread id %d, thread name %s started", m_tid, m_name);
 
     entry->entry_evt->Post();
     //entry->entry_evt has been free, cannot use it anymore
 
-    int fd = m_pWorkQueue->GetDequeueFd(); 
-    void* context = m_pWorkQueue;
+    int fd = m_workqueue->GetDequeueFd(); 
+    void* context = m_workqueue;
 
-    reactor_object_t* work_queue_object = m_pReactor->Register(fd, context, work_queue_read_cb, NULL);
-    m_pReactor->Start();
-    m_pReactor->Deregister(work_queue_object);
+    reactor_object_t* work_queue_object = m_reactor->Register(fd, context, Thread::WorkqueueReady, NULL);
+    m_reactor->Start();
+    m_reactor->Unregister(work_queue_object);
 
     // Make sure we dispatch all queued work items before exiting the thread.
     // This allows a caller to safely tear down by enqueuing a teardown
     // work item and then joining the thread.
     size_t count = 0;
-    work_item_t* item = static_cast<work_item_t*>(m_pWorkQueue->TryDequeue());
-    while (item && count <= m_pWorkQueue->Capacity()) {
+    work_item_t* item = static_cast<work_item_t*>(m_workqueue->TryDequeue());
+    while (item && count <= m_workqueue->GetCapcity()) {
         item->func(item->context);
         sys_free(item);
-        item = static_cast<work_item_t*>(m_pWorkQueue->TryDequeue());
+        item = static_cast<work_item_t*>(m_workqueue->TryDequeue());
         ++count;
     }
 
-    if (count > m_pWorkQueue->Capacity())
-        LOG_DEBUG(LOG_TAG, "%s growing event queue on shutdown.", __func__);
+    if (count > m_workqueue->GetCapcity())
+		LOG_WARN(LOG_TAG, "growing event queue on shutdown.");
 
-    LOG_WARN(LOG_TAG, "%s: thread id %d, thread name %s exited", __func__,
+    LOG_TRACE(LOG_TAG, "thread id %d, thread name %s exited",
            m_tid, m_name);
     
     return NULL;
 }
 
-void* Thread::run_thread(void* arg) {
+void* Thread::RunThread(void* arg) {
     CHECK(arg != NULL);
-    struct entry_arg* entry = static_cast<entry_arg*>(arg);    
+    entry_arg* entry = static_cast<entry_arg*>(arg);    
     return entry->thread->Run(arg);
 }
 
 
-static void work_queue_read_cb(void* context) {
+void Thread::WorkqueueReady(void* context) {
   CHECK(context != NULL);
 
   FixedQueue* queue = (FixedQueue*)context;

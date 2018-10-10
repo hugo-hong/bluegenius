@@ -19,8 +19,25 @@
 *********************************************************************************/
 #ifndef _UTIL_ALARM_H_
 #define _UTIL_ALARM_H_
-
+#include "utils.h"
 #include "seqlist.h"
+
+class Alarm {
+public:
+	Alarm(const char* name, bool is_periodic);
+	~Alarm()
+	{
+
+	}
+
+	bool CreateTimer(const clockid_t clock_id, timer_t* timer);
+protected:
+	void New(const char* name, bool is_periodic);
+	bool lazy_initialize(void);
+
+private:
+	bool m_isPeriodic;
+};
 
 #endif //_UTIL_ALARM_H_
 

@@ -17,6 +17,8 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
+#define LOG_TAG  "bluegenius_utils_alarm"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -25,6 +27,10 @@
 #include <signal.h>
 #include <string.h>
 #include <time.h>
+#include <mutex>
+
+#include "fixed_queue.h"
+#include "alarm.h"
 
 // Callback and timer threads should run at RT priority in order to ensure they
 // meet audio deadlines.  Use this priority for all audio/timer related thread.
@@ -119,7 +125,7 @@ bool Alarm::lazy_initialize(void) {
     
     m_alarmList = new SeqList(NULL);
     if (NULL == m_alarmList) {
-        LOG_ERROR(LOG_TAG, "%s unable to allocate alarm list.", __func__);
+        LOG_ERROR(LOG_TAG, "%s unable to allocate alarm list.");
         goto error;
     }
     
@@ -190,7 +196,7 @@ static void callback_dispatch(void* context) {
     fixed_queue_enqueue(alarm->queue, alarm);
   }
 
-  LOG_DEBUG(LOG_TAG, "%s Callback thread exited", __func__);
+  LOG_TRACE(LOG_TAG, "%s Callback thread exited", __func__);
 }
 
 

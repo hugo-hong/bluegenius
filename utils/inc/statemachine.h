@@ -23,6 +23,10 @@
 #include <stdint.h>
 #include <list>
 
+class Thread;
+class FixedQueue;
+class CallbackHandler;
+
 using namespace std;
 
 //macro define
@@ -47,38 +51,38 @@ typedef struct {
 
 class StateMachine {
 public:
-  typedef void (StateMachine:: *PFN_HandleMessage)(uint32_t, uint32_t, void*);
+  typedef void (StateMachine::*PFNMessageHandler)(uint32_t, uint32_t, void*);
   typedef struct _SM_State_T {
     int state;
-    PFN_HandleMessage pfnProcessMessage;
+	PFNMessageHandler messagehandler;
   }SM_State_T;
 public:
   StateMachine(void);
   ~StateMachine(void);
   
-  void start();
-  void stop();
-  void addState(SM_State_T state);
-  void removeState(SM_State_T state);
-  void setState(int state);
-  int getState(void);
-  void sendMessage(uint32_t msg_id,  uint32_t len, void * param);
-  void deferMessage(uint32_t msg_id,  uint32_t len, void * param);
+  void Start(int priority);
+  void Stop();
+  void AddState(SM_State_T state);
+  void RemoveState(SM_State_T state);
+  void TransitionTo(int state);
+  int GetState(void);
+  void SendMessage(uint32_t msg_id,  uint32_t len, void *param);
+  void DeferMessage(uint32_t msg_id,  uint32_t len, void *param);
   
 protected:
-  void cleanup();
-  void doTransition();
-  void enterState(int state);
-  void exitState(int state);
-  void toggleState(int state = SM_INVALID_STATE);
-  void processMessage(uint32_t len, void * param);
-  void smEngineRun(void);
-  static void *smMainThread(void *arg);
-  
+  void Cleanup();
+  void PerformTransition();
+  void EnterState(int state);
+  void ExitState(int state);
+
+  static void ProcessMessage(void *context);
 private:
-  list<SM_MSG_T> m_curMessages;
-  list<SM_MSG_T> m_deferMessages;
-  CallbackHandler m_stateHandler;
-}
+	int m_curstate;
+	int m_desstate;
+	
+	Thread *m_thread;
+	SeqList *m_defermessages;
+	CallbackHandler m_statehandler;
+};
 
 #endif //_STATE_MACHINE_H_

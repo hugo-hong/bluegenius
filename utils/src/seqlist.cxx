@@ -16,7 +16,9 @@
    ALL LIABILITY, INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PATENTS,
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
-*********************************************************************************/ 
+********************************************************************************/ 
+#include "utils.h"
+#include "allocator.h"
 #include "seqlist.h"
 
 SeqList::SeqList (list_free_cb pfnFree)
@@ -120,15 +122,15 @@ list_node_t* SeqList::End() {
     return m_pTail;
 }
 
-bool Insert(void* data, list_node_t* preNode) {
+bool SeqList::Insert(void* data, list_node_t* preNode) {
     std::lock_guard<std::mutex> lock(*m_mutex);
     list_node_t* node = (list_node_t*)sys_malloc(sizeof(list_node_t));
     if (NULL == node) return false;
     node->data = data;
     if (NULL == preNode) {
         //insert in head
-        node->next = m_pHead == NULL ? m_pTail = node, NULL : m_pHead->next;
-        m_pHead = node;        
+        node->next = (m_pHead == NULL ? (NULL) : m_pHead->next);
+        m_pHead = m_pTail = node;
     }
     else {
         node->next = preNode->next;
@@ -145,7 +147,7 @@ void SeqList::New(list_free_cb pfnFree) {
 }
 
 void SeqList::Free() {
-    clear();    
+	Clear();
     if (m_mutex) {
         delete m_mutex;
         m_mutex = NULL;

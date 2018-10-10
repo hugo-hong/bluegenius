@@ -18,16 +18,17 @@
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
 
-#define LOG_TAG "event_proxy"
+#define LOG_TAG "bluegenius_utils_event"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/eventfd.h>
 
-#include "utils/inc/event.h"
+#include "utils.h"
+#include "event.h"
 
-#if !defined(EFD_SEMAPHORE)
+#ifndef EFD_SEMAPHORE
 #define EFD_SEMAPHORE (1 << 0)
 #endif
 
@@ -42,23 +43,19 @@ Event::~Event() {
     Free();
 }
 
-void Event::Wait() {
+int Event::Wait() {
     eventfd_t value;
-    if (eventfd_read(m_fd, &value) == -1)
-        LOG_ERROR(LOG_TAG, "%s unable to wait on event: %s", __func__,
-              strerror(errno));
+	return eventfd_read(m_fd, &value);    
 }
 
 bool Event::TryWait() {
     int flags = fcntl(m_fd, F_GETFL);
     if (-1 == flags) {
-        LOG_ERROR(LOG_TAG, ""%s unable to get flags for event fd: %s",
-              __func__, strerror(errno));
+        LOG_ERROR(LOG_TAG, "unable to get flags for event fd: %s", strerror(errno));
         return false;
     }
     if (fcntl(m_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        LOG_ERROR(LOG_TAG, "%s unable to set O_NONBLOCK for event fd: %s",
-              __func__, strerror(errno));
+        LOG_ERROR(LOG_TAG, "unable to set O_NONBLOCK for event fd: %s", strerror(errno));
         return false;
     }
     bool ret = true;
@@ -66,15 +63,13 @@ bool Event::TryWait() {
     if (eventfd_read(m_fd, &value) == -1) ret = false;
 
     if (fcntl(m_fd, F_SETFL, flags) == -1)
-    LOG_ERROR(LOG_TAG, "%s unable to restore flags for event fd: %s",
-          __func__, strerror(errno));
+		LOG_ERROR(LOG_TAG, "%s unable to restore flags for event fd: %s", strerror(errno));
+
     return ret;  
 }
 
-void Event::Post() {
-    if (-1 == eventfd_write(event->fd, 1ULL))
-        LOG_ERROR(LOG_TAG, "%s unable to wait on event: %s", __func__,
-            strerror(errno));
+int Event::Post() {
+	return eventfd_write(m_fd, 1ULL);   
 }
 
 void Event::New(int value) {
@@ -83,6 +78,7 @@ void Event::New(int value) {
 }
 
 void Event::Free() {
-    if (INVALID_FD != m_fd) close(m_fd);
+    if (INVALID_FD != m_fd) 
+		close(m_fd);
     m_fd = INVALID_FD;
 }

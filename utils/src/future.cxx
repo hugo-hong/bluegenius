@@ -17,50 +17,50 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
-#define LOG_TAG "util_future"
+#define LOG_TAG "bluegenius_utils_future"
 
-#include "utils/inc/event.h"
-#include "utils/inc/future.h"
+#include "utils.h"
+#include "event.h"
+#include "future.h"
 
-struct future_t {
-  bool ready_call_be_called;
-  event_t* event;
-  void* result;
+Future::Future(void *value)
+	:m_ready(false)
+	,m_result(NULL)
+	,m_event(NULL)
+{
+	New(value);
 }
 
-void future_free(future_t* future) {
-  if (!future) return;
-  
-  event_close(future->event);
-  sys_free(future);
+Future::~Future() {
+	Free();
 }
 
-future_t* future_new(void* value) {
-  future_t* future = static_cast<future_t*>sys_calloc(sizeof(future_t));
-  CHECK(future != NULL);
-  
-  future->event = event_create(0);
-  future->result = value;
-  future->ready_can_be_called = true;
-  return future;
+void Future::Ready(void *value) {
+	CHECK(m_event != NULL);
+	CHECK(m_ready != false);
+	m_result = value;
+	m_event->Post();
 }
 
-void future_ready(future_t* future, void* value) {
-  CHECK(future != NULL);
-  CHECK(future->ready_can_be_called);
-  
-  future->result = value;
-  future->ready_can_be_called = false;
-  event_post(future->event);
+void* Future::Await() {
+	if (m_event != NULL)
+		m_event->Wait();
+
+	void *result = m_result;
+	Free();
+	return result;
 }
 
-void* future_await(future_t* future) {
-  CHECK(future != NULL);
-  
-  // If the future is immediate, it will not have a event
-  if (future->event) event_wait(future->event);
-  
-  void* result = future->result;
-  future_free(future);
-  return result;
+void Future::New(void *value) {
+	m_event = new Event(0);
+	m_ready = true;
+	m_result = value;
 }
+
+void Future::Free() {
+	if (m_event != NULL)
+		delete m_event;
+	m_ready = false;
+}
+
+

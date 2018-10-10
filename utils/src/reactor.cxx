@@ -26,11 +26,12 @@
 #include <pthread.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
-
 #include <mutex>
 
-#include "utils/inc/seqlist.h"
-#include "utils/inc/reactor.h"
+#include "utils.h"
+#include "allocator.h"
+#include "seqlist.h"
+#include "reactor.h"
 
 struct reactor_object_t {
   int fd;              // the file descriptor to monitor for events.
@@ -39,11 +40,10 @@ struct reactor_object_t {
   std::mutex* mutex;  // protects the lifetime of this object and all variables.
   void (*read_ready)(void* context);   // function to call when the file descriptor becomes readable.
   void (*write_ready)(void* context);  // function to call when the file descriptor becomes writeable.
-}
+};
 
 static const size_t MAX_EVENTS = 64;
 static const eventfd_t EVENT_REACTOR_STOP = 1;
-
 
 Reactor::Reactor()
    :m_epollFd(INVALID_FD)
@@ -73,8 +73,7 @@ void Reactor::New() {
     event.events = EPOLLIN;
     event.data.ptr = NULL;
     if (-1 == epoll_ctl(m_epollFd, EPOLL_CTL_ADD, m_eventFd, &event)) {
-        LOG_ERROR(LOG_TAG, "%s unable to register eventfd with epoll set: %s",
-            __func__, strerror(errno));
+        LOG_ERROR(LOG_TAG, "unable to register eventfd with epoll set: %s", strerror(errno));
         Free();
         CHECK(0);
     }
@@ -124,7 +123,7 @@ reactor_object_t* Reactor::Register(int fd, void* context, ready_cb pfnRead, rea
     event.data.ptr = object;
     
     if (epoll_ctl(m_epollFd, EPOLL_CTL_ADD, fd, &event) == -1) {
-        LOG_ERROR(LOG_TAG, "%s unable to register fd %d to epoll set: %s", __func__,
+        LOG_ERROR(LOG_TAG, "unable to register fd %d to epoll set: %s",
           fd, strerror(errno));
         delete object->mutex;
         sys_free(object);
@@ -140,8 +139,8 @@ void Reactor::Unregister(reactor_object_t* obj) {
     Reactor* reactor = obj->reactor;    
 
     if (epoll_ctl(m_epollFd, EPOLL_CTL_DEL, obj->fd, NULL) == -1)
-        LOG_ERROR(LOG_TAG, "%s unable to unregister fd %d from epoll set: %s",
-                  __func__, obj->fd, strerror(errno));
+        LOG_ERROR(LOG_TAG, "unable to unregister fd %d from epoll set: %s",
+                  obj->fd, strerror(errno));
 
     if (m_isRunning &&
         pthread_equal(pthread_self(), reactor->m_runThread)) {
@@ -149,7 +148,7 @@ void Reactor::Unregister(reactor_object_t* obj) {
         return;
     }
     
-    reactor->m_invalidList->Append(obj)；
+	reactor->m_invalidList->Append(obj);
 
 
     // Taking the object lock here makes sure a callback for |obj| isn't
@@ -179,10 +178,9 @@ reactor_status_t Reactor::Run(int iterations) {
         if (m_invalidList != NULL) m_invalidList->Clear();
 
         int ret;
-        OSI_NO_INTR(ret = epoll_wait(reactor->epoll_fd, events, MAX_EVENTS, -1));
+		SYS_NO_INTR(ret = epoll_wait(m_epollFd, events, MAX_EVENTS, -1));
         if (ret == -1) {
-            LOG_ERROR(LOG_TAG, "%s error in epoll_wait: %s", __func__,
-                    strerror(errno));
+            LOG_ERROR(LOG_TAG, "error in epoll_wait: %s", strerror(errno));
             m_isRunning = false;
             return REACTOR_STATUS_ERROR;
         }
@@ -193,7 +191,7 @@ reactor_status_t Reactor::Run(int iterations) {
             // out of the reactor loop.
             if (events[j].data.ptr == NULL) {
                 eventfd_t value;
-                eventfd_read(reactor->event_fd, &value);
+                eventfd_read(m_eventFd, &value);
                 m_isRunning = false;
                 return REACTOR_STATUS_STOP;
             }

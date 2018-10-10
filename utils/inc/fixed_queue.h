@@ -17,30 +17,32 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
-#ifndef _FIXED_QUEUE_H_
-#define _FIXED_QUEUE_H_
+#ifndef _UTILS_FIXED_QUEUE_H_
+#define _UTILS_FIXED_QUEUE_H_
 
-#include "seqlist.h"
-#include "event.h"
+class Event;
+class SeqList;
 
-typedef void (*fixed_queue_free_cb)(void* data);
+typedef void(*fixed_queue_free_cb)(void* data);
 
-class FixedQueue {
+class FixedQueue {	
 public:
     FixedQueue(size_t capacity);
     ~FixedQueue();
     
     void Flush(fixed_queue_free_cb free_cb = NULL);
-    bool IsEmpty();
-    size_t GetLength();
+	bool IsEmpty() { return m_list->IsEmpty(); }
+	size_t GetLength() { return m_list->Size(); }
     size_t GetCapcity() {return m_capacity;}
-    SeqList* GetList() {return m_pList;}
+    SeqList* GetList() {return m_list;}
     void Enqueue(void* data);
     void* Dequeue();
     bool TryEnqueue(void* data);
     void* TryDequeue();
     void* PeekFirst();
     void* PeekLast();
+	void Push(void* data);
+	void* Pull();
     void* Remove(void* data);
     int GetEnqueueFd();
     int GetDequeueFd();
@@ -50,10 +52,10 @@ protected:
     void Free();    
     
 private:
-    SeqList* m_pList;
-    Event* m_pEnqueueEvt;
-    Event* m_pDequeueEvt;
+    SeqList *m_list;
+    Event *m_enqueue_evt;
+    Event *m_dequeue_evt;
     size_t m_capacity;    
-}
+};
 
-#endif //_FIXED_QUEUE_H_
+#endif //_UTILS_FIXED_QUEUE_H_
