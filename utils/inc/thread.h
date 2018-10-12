@@ -27,7 +27,7 @@
 #define THREAD_NAME_MAX       		(16)//PR_SET_NAME limit max name length 16 bytes
 #define DEFAULT_WORK_QUEUE_CAPACITY (128)
 
-typedef void(*thread_fn)(void* context);
+typedef void(*thread_fn)(void* context, void* arg);
 
 class Reactor;
 class FixedQueue;
@@ -37,7 +37,7 @@ public:
 	Thread(const char* name, size_t size = DEFAULT_WORK_QUEUE_CAPACITY);
 	~Thread();
 	
-	void Post(thread_fn func, void* context);
+	void Post(thread_fn func, void* context, void* arg = NULL);
 	void Stop();
 	void Join();
 	bool SetPriority(int priority);

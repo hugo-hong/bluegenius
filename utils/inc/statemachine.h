@@ -34,9 +34,7 @@ using namespace std;
 
 //message type
 typedef enum {
-  SM_MSG_INIT,
-  SM_MSG_PROCESS_MSG,
-  SM_MSG_TOGGLE_STATE,
+  SM_MSG_INIT, 
   SM_MSG_STATE_ENTER,
   SM_MSG_STATE_EXIT,
   SM_MSG_DEINIT,
@@ -64,6 +62,7 @@ public:
   void Stop();
   void AddState(SM_State_T state);
   void RemoveState(SM_State_T state);
+  void SetInitState(int state);
   void TransitionTo(int state);
   int GetState(void);
   void SendMessage(uint32_t msg_id,  uint32_t len, void *param);
@@ -75,7 +74,7 @@ protected:
   void EnterState(int state);
   void ExitState(int state);
 
-  static void ProcessMessage(void *context);
+  static void ProcessMessage(void *context, void *arg);
 private:
 	int m_curstate;
 	int m_desstate;

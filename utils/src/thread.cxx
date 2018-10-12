@@ -43,6 +43,7 @@ struct entry_arg {
 typedef struct {
 	thread_fn func;
 	void* context;
+	void* arg;
 } work_item_t;
 
 Thread::Thread(const char* name, size_t size)
@@ -59,7 +60,7 @@ Thread::~Thread() {
     Free();
 }
 
-void Thread::Post(thread_fn func, void* context) {
+void Thread::Post(thread_fn func, void* context, void* arg) {
     CHECK(func != NULL);
     CHECK(m_workqueue != NULL);
     
@@ -72,6 +73,7 @@ void Thread::Post(thread_fn func, void* context) {
     work_item_t* item = (work_item_t*)sys_malloc(sizeof(work_item_t));
     item->func = func;
     item->context = context;
+	item->arg = arg;
     m_workqueue->Enqueue(item); 
 }
 
@@ -187,7 +189,7 @@ void* Thread::Run(void* arg) {
     size_t count = 0;
     work_item_t* item = static_cast<work_item_t*>(m_workqueue->TryDequeue());
     while (item && count <= m_workqueue->GetCapcity()) {
-        item->func(item->context);
+        item->func(item->context, item->arg);
         sys_free(item);
         item = static_cast<work_item_t*>(m_workqueue->TryDequeue());
         ++count;
@@ -214,6 +216,6 @@ void Thread::WorkqueueReady(void* context) {
 
   FixedQueue* queue = (FixedQueue*)context;
   work_item_t* item = static_cast<work_item_t*>(queue->Dequeue());
-  item->func(item->context);
+  item->func(item->context, item->arg);
   sys_free(item);
 }
