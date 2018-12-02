@@ -16,42 +16,32 @@
    ALL LIABILITY, INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PATENTS,
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
-*********************************************************************************/
-#ifndef _SINGLETON_H_
-#define _SINGLETON_H_
-#include <mutex>
-//#include <boost/noncopyable>
+*********************************************************************************/ 
+#ifndef _UTILS_WAKELOCK_H_
+#define _UTILS_WAKELOCK_H_
 
-template<typename T>
-class Singleton //: boost::noncopyable
-{
-public:
-   static T& GetInstance() {
-    std::call_once(Singleton::ms_onceFlag, Singleton::init);
-    return *ms_pInstance;
-  }
+class Wakelock : public Singleton<Wakelock> {
+public:  
+	void PreInit(void);
+	bt_status_t Acquire(void);
+	bt_status_t Release(void);
+	void SetPath(const char *lock_path = NULL, const char *unlock_path = NULL);	
+
 protected:
-  static void init() {
-    static T INSTANCE;
-	ms_pInstance = &INSTANCE;
-  }
+	void LazyInit();
+    
 private:
-  Singleton(const Singleton&){} //no copy
-  Singleton& operator=(const Singleton&) {} //no assignment
-  ~Singleton(){} 
-  
-private:
-  static T* ms_pInstance;
-  static std::once_flag ms_onceFlag;
+	static const clockid_t kClockId;
+	static const char *kWakelockId;
+	static const std::string kDefaultWakelockPath;
+	static const std::string kDefaultWakeunlockPath;
+	static std::once_flag ms_onceFlag;
+
+	std::string m_wakelock_path;
+	std::string m_wakeunlock_path;
+	int m_wakelock_fd;
+	int m_wakeunlock_fd;
+	ssize_t m_locked_id_len;
 };
 
-template<typename T> 
-T* Singleton<T>::ms_pInstance = NULL;
-
-template<typename T> 
-std::once_flag Singleton<T>::ms_onceFlag;
-
-//usage
-//MyClass& thiz = Singleton<MyClass>::GetInstance();
-
-#endif //_SINGLETON_H_
+#endif //_UTILS_WAKELOCK_H_

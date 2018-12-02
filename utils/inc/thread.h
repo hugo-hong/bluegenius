@@ -44,7 +44,7 @@ public:
 	bool SetRTPriority(int priority);
 	bool IsSelf();	
 	Reactor* GetReactor() {return m_reactor;}
-	FixedQueue* GetWorkqueue() { return m_workqueue; }
+	FixedQueue* GetWorkqueue() {return m_workqueue;}
 	const char* GetName() {return m_name;}
 	
 protected:

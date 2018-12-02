@@ -87,8 +87,8 @@ private:
 #define REGISTER_CALLBACK(theClass, id, object, memberFxn, handler) \
 { \
   if (object != NULL && memberFxn != NULL) { \
-    CallbackProxy<theClass> *thisCallback = new CallbackProxy<theClass>(object, memberFxn); \
-    handler.RegisterCallback(id, thisCallback); \
+    CallbackProxy<theClass> *thiz = new CallbackProxy<theClass>(object, memberFxn); \
+    handler.RegisterCallback(id, thiz); \
   } \
 }
 

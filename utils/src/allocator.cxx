@@ -48,5 +48,27 @@ void sys_free_and_reset(void** p_ptr) {
 	*p_ptr = NULL;
 }
 
+char *sys_strdup(const char *str) {
+	if (str == NULL) return NULL;
+	size_t size = strlen(str) + 1;
+	size_t real_size = allocator_resize(size);
+	char *new_str = (char *)malloc(real_size);
+	CHECK(new_str != NULL);
+	memcpy(new_str, str, size);
+	return new_str;
+}
+
+char *sys_strndup(const char *str, size_t len) {
+	if (str == NULL) return NULL;
+	size_t size = strlen(str);
+	size = MIN(size, len);
+	size_t real_size = allocator_resize(size + 1);
+	char *new_str = (char *)malloc(real_size);
+	CHECK(new_str != NULL);
+	memcpy(new_str, str, size);
+	new_str[size] = '\0';
+	return new_str;
+}
+
 const allocator_t allocator_calloc = {sys_calloc, sys_free};
 const allocator_t allocator_malloc = {sys_malloc, sys_free};

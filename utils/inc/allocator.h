@@ -34,7 +34,8 @@ typedef struct {
 void* sys_malloc(size_t size);
 void* sys_calloc(size_t size);
 void sys_free(void* ptr);
-
+char *sys_strdup(const char *str);
+char *sys_strndup(const char *str, size_t len);
 
 
 

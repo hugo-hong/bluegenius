@@ -84,7 +84,7 @@ void StateMachine :: SendMessage(uint32_t msg_id,  uint32_t len, void * param) {
 	if (len > 0 && param != NULL) {
 		memcpy(msg->param, param, len);
 	}
-	m_thread->Post((thread_fn)StateMachine::ProcessMessage, msg);
+	m_thread->Post((thread_fn)StateMachine::ProcessMessage, this, msg);
 }
 
 void StateMachine :: DeferMessage(uint32_t msg_id,  uint32_t len, void * param) {  

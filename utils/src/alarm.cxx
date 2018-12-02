@@ -17,8 +17,7 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
-#define LOG_TAG  "bluegenius_utils_alarm"
-
+#define LOG_TAG  "utils_alarm"
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
@@ -29,89 +28,87 @@
 #include <time.h>
 #include <mutex>
 
+#include "utils.h"
+#include "allocator.h"
+#include "seqlist.h"
+#include "event.h"
 #include "fixed_queue.h"
+#include "reactor.h"
+#include "thread.h"
 #include "alarm.h"
 
 // Callback and timer threads should run at RT priority in order to ensure they
 // meet audio deadlines.  Use this priority for all audio/timer related thread.
 static const int THREAD_RT_PRIORITY = 1;
 
-typedef struct {
-  size_t count;
-  uint64_t total_ms;
-  uint64_t max_ms;
-} stat_t;
 
-// Alarm-related information and statistics
-typedef struct {
-  const char* name;
-  size_t scheduled_count;
-  size_t canceled_count;
-  size_t rescheduled_count;
-  size_t total_updates;
-  uint64_t last_update_ms;
-  stat_t callback_execution;
-  stat_t overdue_scheduling;
-  stat_t premature_scheduling;
-} alarm_stats_t;
-
-
-Alarm::Alarm(const char* name, bool is_periodic)
-    :m_creation_time(0)
-    ,m_period(0)
-    ,m_deadline(0)
-    ,m_prev_deadline(0)
-    ,m_isPeriodic(false)
-    ,m_queue(NULL)
-    ,m_callback(NULL)
-    ,m_data(NULL)
-    ,m_mutex(NULL)
-    ,m_alarmList(NULL)
-{
-    New(name, is_periodic);
+Alarm::Alarm() { 
+	CHECK(lazy_initialize());
 }
 
-bool Alarm::CreateTimer(const clockid_t clock_id, timer_t* timer) {
-    CHECK(timer == NULL);
-    
-    //create timer with rt priority thread
-    pthread_attr_t thread_attr;
-    pthread_attr_init(&thread_attr);
-    pthread_attr_setschedpolicy(&thread_attr, SCHED_FIFO);
-    struct sched_param param;
-    param.sched_priority = THREAD_RT_PRIORITY;
-    pthread_attr_setschedparam(&thread_attr, &param);
-    
-    struct sigevent sigevt;
-    memset(&sigevt, 0, sizeof(sigevt));
-    sigevt.sigev_notify = SIGEV_THREAD;
-    sigevent.sigev_notify_function = (void (*)(union sigval))timer_callback;  
-    if (timer_create(clock_id, &sigevt, timer) == -1) {
-        LOG_ERROR(LOG_TAG, "%s unable to create timer with clock %d: %s", __func__,
-                  clock_id, strerror(errno));
-        if (clock_id == CLOCK_BOOTTIME_ALARM) {
-          LOG_ERROR(LOG_TAG,
-                    "The kernel might not have support for "
-                    "timer_create(CLOCK_BOOTTIME_ALARM): "
-                    "https://lwn.net/Articles/429925/");
-          LOG_ERROR(LOG_TAG,
-                    "See following patches: "
-                    "https://git.kernel.org/cgit/linux/kernel/git/torvalds/"
-                    "linux.git/log/?qt=grep&q=CLOCK_BOOTTIME_ALARM");
-        }
-        return false;
-  }
-
-  return true;
-
+Alarm::~Alarm(){
 }
 
-void Alarm::New(const char* name, bool is_periodic) {
-    CHECK(lazy_initialize());
-    
-    m_isPeriodic = is_periodic;
+alarm_data_t* Alarm::CreateTimer(const char* name, bool is_periodic) {
+	alarm_data_t *timer = static_cast<alarm_data_t*>(sys_malloc(sizeof(alarm_data_t)));
+
+	CHECK(timer != NULL);
+
+	timer->isPeriodic = is_periodic;
+	timer->stats.name = sys_strdup(name);
+	timer->callback_mutex = new std::recursive_mutex;
+
+	return timer;
 }
 
+void Alarm::SetTimer(alarm_data_t *timer, uint64_t interval, callback_func_t cb, void *data) {
+	CHECK(timer != NULL);
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	timer->creation_time = Alarm::now();
+	timer->period = interval;
+	timer->callback_func = cb;
+	timer->data = data;
+
+	schedule_next_instance(timer);
+	++timer->stats.scheduled_count;
+}
+
+bool Alarm::create_timer(const clockid_t clock_id, timer_t* timer) {
+	CHECK(timer == NULL);
+
+	//create timer with rt priority thread
+	pthread_attr_t thread_attr;
+	pthread_attr_init(&thread_attr);
+	pthread_attr_setschedpolicy(&thread_attr, SCHED_FIFO);
+	struct sched_param param;
+	param.sched_priority = THREAD_RT_PRIORITY;
+	pthread_attr_setschedparam(&thread_attr, &param);
+
+	struct sigevent sigevt;
+	memset(&sigevt, 0, sizeof(sigevt));
+	sigevt.sigev_notify = SIGEV_THREAD;
+	sigevt.sigev_notify_function = (void(*)(union sigval))Alarm::timer_callback;
+	if (timer_create(clock_id, &sigevt, timer) == -1) {
+		LOG_ERROR(LOG_TAG, "%s unable to create timer with clock %d: %s", __func__,
+			clock_id, strerror(errno));
+		if (clock_id == CLOCK_BOOTTIME_ALARM) {
+			LOG_ERROR(LOG_TAG,
+				"The kernel might not have support for "
+				"timer_create(CLOCK_BOOTTIME_ALARM): "
+				"https://lwn.net/Articles/429925/");
+			LOG_ERROR(LOG_TAG,
+				"See following patches: "
+				"https://git.kernel.org/cgit/linux/kernel/git/torvalds/"
+				"linux.git/log/?qt=grep&q=CLOCK_BOOTTIME_ALARM");
+		}
+		return false;
+	}
+
+	return true;
+
+}
 
 bool Alarm::lazy_initialize(void) {
     CHECK(m_alarmList == NULL);
@@ -129,10 +126,10 @@ bool Alarm::lazy_initialize(void) {
         goto error;
     }
     
-    if (!CreateTimer(CLOCK_ID, &m_timer)) goto error;
+    if (!create_timer(CLOCK_BOOTTIME, &m_timer)) goto error;
     timer_initialized = true;
     
-    if (!CreateTimer(CLOCK_ID_ALARM, &m_wakeuptimer)) goto error;
+    if (!create_timer(CLOCK_BOOTTIME_ALARM, &m_wakeuptimer)) goto error;
     wakeup_timer_initialized = true;
     
     m_alarmExpired = new Event(0);
@@ -141,63 +138,51 @@ bool Alarm::lazy_initialize(void) {
     m_callbackThread = new Thread("alarm_default_callbacks", SIZE_MAX);
     m_callbackThread->SetRTPriority(THREAD_RT_PRIORITY);
     m_callbackQueue = new FixedQueue(SIZE_MAX);
-    m_callbackThread->GetReactor()->Register(m_callbackQueue->GetFd(), m_callbackQueue,  alarm_queue_ready, NULL);
+    m_callbackThread->GetReactor()->Register(m_callbackQueue->GetDequeueFd(), m_callbackQueue, alarm_queue_ready, NULL);
     
     //dispatch thread
     m_dispatchThreadActive = true;
     m_dispatchThread = new Thread("alarm_dispatcher");
     m_dispatchThread->SetRTPriority(THREAD_RT_PRIORITY);
-    m_dispatchThread->Post(callback_dispatch, this);
+    m_dispatchThread->Post(Alarm::callback_dispatch, this);
 
     return true;
 error:
     if (m_alarmList != NULL) delete m_alarmList;
+	if (m_alarmExpired != NULL) delete m_alarmExpired;
     if (m_callbackThread != NULL) delete m_callbackThread;
     if (m_dispatchThread != NULL) delete m_dispatchThread;
+	if (timer_initialized) timer_delete(m_timer);
+	if (wakeup_timer_initialized) timer_delete(m_wakeuptimer);
+
     return false;
+}
+
+void Alarm::schedule_next_instance(alarm_data_t *alarm) {
+}
+
+void Alarm::timer_callback(void *arg) {
+}
+
+void Alarm::alarm_queue_ready(void* context) {
 }
 
 // Function running on |dispatcher_thread| that performs the following:
 //   (1) Receives a signal using |alarm_exired| that the alarm has expired
 //   (2) Dispatches the alarm callback for processing by the corresponding
 // thread for that alarm.
-static void callback_dispatch(void* context) {
-    Alarm* alarm = static_cast<Alarm*>context;
-    CHECK(alarm != NULL);
-  while (true) {
-      
-    if (alarm->m_alarmExpired != NULL) alarm->m_alarmExpired->Wait();
-      
-    semaphore_wait(alarm_expired);
-    if (!dispatcher_thread_active) break;
-
-    std::lock_guard<std::mutex> lock(alarms_mutex);
-    alarm_t* alarm;
-
-    // Take into account that the alarm may get cancelled before we get to it.
-    // We're done here if there are no alarms or the alarm at the front is in
-    // the future. Exit right away since there's nothing left to do.
-    if (list_is_empty(alarms) ||
-        (alarm = static_cast<alarm_t*>(list_front(alarms)))->deadline > now()) {
-      reschedule_root_alarm();
-      continue;
-    }
-
-    list_remove(alarms, alarm);
-
-    if (alarm->is_periodic) {
-      alarm->prev_deadline = alarm->deadline;
-      schedule_next_instance(alarm);
-      alarm->stats.rescheduled_count++;
-    }
-    reschedule_root_alarm();
-
-    // Enqueue the alarm for processing
-    fixed_queue_enqueue(alarm->queue, alarm);
-  }
-
-  LOG_TRACE(LOG_TAG, "%s Callback thread exited", __func__);
+void Alarm::callback_dispatch(void* context, void* arg) {
+    Alarm* alarm = static_cast<Alarm*>(context);
+   
 }
 
+uint64_t Alarm::now(void) {
+	struct timespec ts;
+	if (clock_gettime(CLOCK_BOOTTIME, &ts) == -1) {
+		LOG_ERROR(LOG_TAG, "unable to get current time: %s", strerror(errno));
+		return 0;
+	}
+	return (ts.tv_sec * 1000LL) + (ts.tv_nsec / 1000000LL);
+}
 
 
