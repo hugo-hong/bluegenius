@@ -70,6 +70,7 @@ void Alarm::SetTimer(alarm_data_t *timer, uint64_t interval, callback_func_t cb,
 	timer->period = interval;
 	timer->callback_func = cb;
 	timer->data = data;
+	timer->queue = m_callbackQueue;
 
 	schedule_next_instance(timer);
 	++timer->stats.scheduled_count;
@@ -89,6 +90,7 @@ bool Alarm::create_timer(const clockid_t clock_id, timer_t* timer) {
 	struct sigevent sigevt;
 	memset(&sigevt, 0, sizeof(sigevt));
 	sigevt.sigev_notify = SIGEV_THREAD;
+	sigevt.sigev_value.sival_ptr = static_cast<void*>(this);
 	sigevt.sigev_notify_function = (void(*)(union sigval))Alarm::timer_callback;
 	if (timer_create(clock_id, &sigevt, timer) == -1) {
 		LOG_ERROR(LOG_TAG, "%s unable to create timer with clock %d: %s", __func__,
@@ -162,6 +164,9 @@ void Alarm::schedule_next_instance(alarm_data_t *alarm) {
 }
 
 void Alarm::timer_callback(void *arg) {
+	CHECK(arg != NULL);
+	Alarm* thiz = static_cast<Alarm*>(arg);
+	thiz->m_dispatchThread->Post(Alarm::callback_dispatch, arg);
 }
 
 void Alarm::alarm_queue_ready(void* context) {
@@ -172,7 +177,8 @@ void Alarm::alarm_queue_ready(void* context) {
 //   (2) Dispatches the alarm callback for processing by the corresponding
 // thread for that alarm.
 void Alarm::callback_dispatch(void* context, void* arg) {
-    Alarm* alarm = static_cast<Alarm*>(context);
+    Alarm* thiz = static_cast<Alarm*>(context);
+
    
 }
 
