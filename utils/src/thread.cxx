@@ -27,7 +27,7 @@
 #include <sys/prctl.h>
 
 #include "utils.h"
-#include "event.h"
+#include "eventlock.h"
 #include "seqlist.h"
 #include "reactor.h"
 #include "fixed_queue.h"
@@ -36,7 +36,7 @@
 
 struct entry_arg {
 	Thread* thread;
-	Event* entry_evt;
+	EventLock* entry_evt;
 	int error;
 };
 
@@ -101,7 +101,7 @@ void Thread::New(const char* name, size_t size) {
     // Start is on the stack, but we use a event, so it's safe
 	entry_arg arg;
     arg.thread = this;
-    arg.entry_evt = new Event(0);
+    arg.entry_evt = new EventLock(0);
     arg.error = 0;
     
     pthread_create(&m_thread, NULL, Thread::RunThread, &arg);
@@ -209,7 +209,6 @@ void* Thread::RunThread(void* arg) {
     entry_arg* entry = static_cast<entry_arg*>(arg);    
     return entry->thread->Run(arg);
 }
-
 
 void Thread::WorkqueueReady(void* context) {
   CHECK(context != NULL);

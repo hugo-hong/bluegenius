@@ -31,7 +31,7 @@
 #include "utils.h"
 #include "allocator.h"
 #include "seqlist.h"
-#include "event.h"
+#include "eventlock.h"
 #include "fixed_queue.h"
 #include "reactor.h"
 #include "thread.h"
@@ -134,7 +134,7 @@ bool Alarm::lazy_initialize(void) {
     if (!create_timer(CLOCK_BOOTTIME_ALARM, &m_wakeuptimer)) goto error;
     wakeup_timer_initialized = true;
     
-    m_alarmExpired = new Event(0);
+    m_alarmExpired = new EventLock(0);
     
     //callback thread
     m_callbackThread = new Thread("alarm_default_callbacks", SIZE_MAX);

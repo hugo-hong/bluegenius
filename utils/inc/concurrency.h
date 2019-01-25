@@ -1,7 +1,7 @@
 /*********************************************************************************
    Bluegenius - Bluetooth host protocol stack for Linux/android/windows...
-   Copyright (C) 
-   Written 2017 by hugoï¼ˆyongguang hongï¼‰ <hugo.08@163.com>
+   Copyright (C)
+   Written 2017 by hugo£¨yongguang hong£© <hugo.08@163.com>
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
    published by the Free Software Foundation;
@@ -16,26 +16,57 @@
    ALL LIABILITY, INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PATENTS,
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
-*********************************************************************************/ 
-#ifndef _UTILS_EVENT_H_
-#define _UTILS_EVENT_H_
+*********************************************************************************/
+#ifndef _UTILS_CONCURRENCY_H_
+#define _UTILS_CONCURRENCY_H_
+#include <pthread.h>
 
-class Event {
+class Mutex
+{
 public:
-	Event(int value);
-    ~Event();
-    
-    int Wait();
-    bool TryWait();
-    int Post();
-    int GetFd() {return m_fd;}
-    
+	Mutex();
+	~Mutex();
+
+	bool lock();
+	bool unlock();
+
 protected:
-    void New(int value);
-    void Free();
-    
+	friend class Condition;
+
 private:
-    int m_fd;
+	pthread_mutex_t m_mutex;
 };
 
-#endif //_UTILS_EVENT_H_
+class Condition
+{
+public:
+	explicit Condition(Mutex *);
+	~Condition();
+
+	void wait();
+	void signal();
+	void broadcast();
+
+private:
+	pthread_cond_t m_cond;
+	pthread_mutex_t *m_mutex;
+};
+
+class ConCurrency
+{
+public:
+	explicit ConCurrency(int count);
+	~ConCurrency();
+
+	void wait();
+	void signal();
+	void broadcast();
+
+private:
+	int m_count;
+	Mutex m_mutex;
+	Condition m_cond;
+};
+
+
+#endif //_UTILS_CONCURRENCY_H_

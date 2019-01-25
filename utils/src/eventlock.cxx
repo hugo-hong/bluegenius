@@ -18,7 +18,7 @@
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
 
-#define LOG_TAG "bluegenius_utils_event"
+#define LOG_TAG "utils_eventlock"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -26,29 +26,29 @@
 #include <sys/eventfd.h>
 
 #include "utils.h"
-#include "event.h"
+#include "eventlock.h"
 
 #ifndef EFD_SEMAPHORE
 #define EFD_SEMAPHORE (1 << 0)
 #endif
 
 
-Event::Event(int value)
+EventLock::EventLock(int value)
     :m_fd(INVALID_FD)
 {
     New(value);
 }
 
-Event::~Event() {
+EventLock::~EventLock() {
     Free();
 }
 
-int Event::Wait() {
+int EventLock::Wait() {
     eventfd_t value;
 	return eventfd_read(m_fd, &value);    
 }
 
-bool Event::TryWait() {
+bool EventLock::TryWait() {
     int flags = fcntl(m_fd, F_GETFL);
     if (-1 == flags) {
         LOG_ERROR(LOG_TAG, "unable to get flags for event fd: %s", strerror(errno));
@@ -68,16 +68,16 @@ bool Event::TryWait() {
     return ret;  
 }
 
-int Event::Post() {
+int EventLock::Post() {
 	return eventfd_write(m_fd, 1ULL);   
 }
 
-void Event::New(int value) {
+void EventLock::New(int value) {
     CHECK(m_fd == INVALID_FD);
     m_fd = eventfd(value, EFD_SEMAPHORE);
 }
 
-void Event::Free() {
+void EventLock::Free() {
     if (INVALID_FD != m_fd) 
 		close(m_fd);
     m_fd = INVALID_FD;

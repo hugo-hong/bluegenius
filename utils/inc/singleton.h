@@ -26,10 +26,10 @@ template<typename T>
 class Singleton //: boost::noncopyable
 {
 public:
-   static T& GetInstance() {
-    std::call_once(Singleton::ms_onceFlag, Singleton::init);
-    return *ms_pInstance;
-  }
+	static T& GetInstance() {
+		std::call_once(Singleton::ms_onceFlag, Singleton::init);
+		return *ms_pInstance;
+	}
 protected:
   static void init() {
     static T INSTANCE;

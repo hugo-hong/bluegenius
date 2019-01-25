@@ -17,27 +17,25 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/ 
-#ifndef _UTILS_FUTURE_H_
-#define _UTILS_FUTURE_H_
+#ifndef _UTILS_EVENTLOCK_H_
+#define _UTILS_EVENTLOCK_H_
 
-class EventLock;
-
-class Future {
+class EventLock {
 public:
-	Future(void *value = NULL);
-    ~Future();
+	EventLock(int value);
+    ~EventLock();
     
-	void Ready(void *value);
-	void* Await();   
+    int Wait();
+    bool TryWait();
+    int Post();
+    int GetFd() {return m_fd;}
     
 protected:
-    void New(void *value);
+    void New(int value);
     void Free();
     
 private:
-	bool m_ready;
-	void *m_result;
-	EventLock *m_event;
+    int m_fd;
 };
 
-#endif //_UTILS_FUTURE_H_
+#endif //_UTILS_EVENTLOCK_H_

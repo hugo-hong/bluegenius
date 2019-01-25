@@ -20,7 +20,7 @@
 #ifndef _UTILS_FIXED_QUEUE_H_
 #define _UTILS_FIXED_QUEUE_H_
 
-class Event;
+class EventLock;
 class SeqList;
 
 typedef void(*fixed_queue_free_cb)(void* data);
@@ -53,8 +53,8 @@ protected:
     
 private:
     SeqList *m_list;
-    Event *m_enqueue_evt;
-    Event *m_dequeue_evt;
+	EventLock *m_enqueue_evt;
+	EventLock *m_dequeue_evt;
     size_t m_capacity;    
 };
 

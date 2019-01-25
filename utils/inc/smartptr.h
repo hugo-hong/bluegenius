@@ -1,7 +1,7 @@
 /*********************************************************************************
    Bluegenius - Bluetooth host protocol stack for Linux/android/windows...
-   Copyright (C) 
-   Written 2017 by hugoï¼ˆyongguang hongï¼‰ <hugo.08@163.com>
+   Copyright (C)
+   Written 2017 by hugo£¨yongguang hong£© <hugo.08@163.com>
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
    published by the Free Software Foundation;
@@ -16,28 +16,69 @@
    ALL LIABILITY, INCLUDING LIABILITY FOR INFRINGEMENT OF ANY PATENTS,
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
-*********************************************************************************/ 
-#ifndef _UTILS_FUTURE_H_
-#define _UTILS_FUTURE_H_
+*********************************************************************************/
+#ifndef _UTIL_SMARTPTR_H_
+#define _UTIL_SMARTPTR_H_
 
-class EventLock;
-
-class Future {
+template<typename T>
+class SmartPtr
+{
 public:
-	Future(void *value = NULL);
-    ~Future();
-    
-	void Ready(void *value);
-	void* Await();   
-    
-protected:
-    void New(void *value);
-    void Free();
-    
+	SmartPtr(T *ptr = nullptr)
+		:m_ptr(ptr) {
+		if (m_ptr != nullptr)
+			m_ref = new size_t(1);
+		else
+			m_ref = new size_t(0);
+	}
+
+	//copy construction
+	SmartPtr(const SmartPtr &ptr) {
+		if (this != &ptr) {
+			this->m_ptr = ptr.m_ptr;
+			this->m_ref = ptr.m_ref;
+			(*this->m_ref)++;
+		}		
+	}
+
+	~SmartPtr() {
+		if (--(*m_ref) == 0) {
+			delete m_ptr;
+			delete m_ref;
+		}
+	}
+
+	T& operator*() {
+		return *(this->m_ptr);
+	}
+
+	T* operator->() {
+		return this->m_ptr;
+	}
+
+	SmartPtr<T>& operator=(SmartPtr<T>& sp) {
+		if (this->m_ptr != sp.m_ptr) {
+			if (--(*m_ref) == 0) {
+				delete m_ptr;
+				delete m_ref;
+			}
+
+			m_ptr = sp.m_ptr;
+			m_ref = sp.m_ref;
+			(*m_ref)++;
+		}
+
+		return *this;
+	}
+
+	size_t getRef() {
+		return *m_ref;
+	}
+
 private:
-	bool m_ready;
-	void *m_result;
-	EventLock *m_event;
+	T *m_ptr;
+	size_t *m_ref;
 };
 
-#endif //_UTILS_FUTURE_H_
+
+#endif //_UTIL_SMARTPTR_H_

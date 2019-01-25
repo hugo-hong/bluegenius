@@ -20,7 +20,7 @@
 #include <mutex>
 
 #include "utils.h"
-#include "event.h"
+#include "eventlock.h"
 #include "seqlist.h"
 #include "fixed_queue.h"
 
@@ -136,8 +136,8 @@ int FixedQueue::GetEnqueueFd() {
 void FixedQueue::New(size_t capacity) {
     m_capacity = capacity;
     m_list = new SeqList(NULL);
-    m_enqueue_evt = new Event(capacity);
-    m_dequeue_evt = new Event(0);    
+    m_enqueue_evt = new EventLock(capacity);
+    m_dequeue_evt = new EventLock(0);
     
     CHECK(m_list != NULL);
     CHECK(m_enqueue_evt != NULL);

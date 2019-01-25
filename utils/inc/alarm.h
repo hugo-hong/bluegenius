@@ -77,7 +77,7 @@ private:
 	SeqList *m_alarmList;
 	timer_t m_timer;
 	timer_t m_wakeuptimer;
-	Event *m_alarmExpired;
+	EventLock *m_alarmExpired;
 	Thread *m_callbackThread;
 	FixedQueue *m_callbackQueue;
 	bool m_dispatchThreadActive;

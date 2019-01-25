@@ -20,7 +20,7 @@
 #define LOG_TAG "bluegenius_utils_future"
 
 #include "utils.h"
-#include "event.h"
+#include "eventlock.h"
 #include "future.h"
 
 Future::Future(void *value)
@@ -52,7 +52,7 @@ void* Future::Await() {
 }
 
 void Future::New(void *value) {
-	m_event = new Event(0);
+	m_event = new EventLock(0);
 	m_ready = true;
 	m_result = value;
 }
