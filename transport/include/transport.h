@@ -1,7 +1,7 @@
 /*********************************************************************************
    Bluegenius - Bluetooth host protocol stack for Linux/android/windows...
-   Copyright (C) 
-   Written 2017 by hugoï¼ˆyongguang hongï¼‰ <hugo.08@163.com>
+   Copyright (C)
+   Written 2017 by hugo£¨yongguang hong£© <hugo.08@163.com>
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
    published by the Free Software Foundation;
@@ -17,42 +17,36 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
-#ifndef _BLUEGENIUS_SNOOP_H_
-#define _BLUEGENIUS_SNOOP_H_
-#include "bt_hci.h"
-#include "module.h"
+#ifndef _BLUEGENIUS_TRANSPORT_H_
+#define _BLUEGENIUS_TRANSPORT_H_
 
-class BtSnoop : public Module {
-public:	
+typedef enum {
+	BT_TRAN_OP_POWER_CTRL,
+	BT_TRAN_OP_FW_CFG,
+	BT_TRAN_OP_AUDIO_CFG,
+	BT_TRAN_OP_PORT_OPEN,
+	BT_TRAN_OP_PORT_CLOSE,
+}bt_transport_opcode_t;
 
-	BtSnoop() : Module() {}
-	~BtSnoop() {}
+/** Power on/off control states */
+typedef enum {
+	BT_TRAN_PWR_OFF,
+	BT_TRAN_PWR_ON,
+}bt_transport_power_state_t;
 
-	virtual Future* start_up();
-	virtual Future* shut_down();
+/** Callback result values */
+typedef enum {
+	BT_TRAN_OP_RESULT_SUCCESS,
+	BT_TRAN_OP_RESULT_FAIL,
+} bt_transport_op_result_t;
 
-	void capture(const BT_HDR* buffer, bool is_received);
+/*
+* Bluetooth Host/Controller Transport Interface
+*/
+typedef struct {
+	size_t size;
+}bt_transport_interface_t;
 
-	static BtSnoop& GetInstance() { return BTSNOOP_INSTANCE; }
+#endif // _BLUEGENIUS_TRANSPORT_H_
 
-protected:	
-	int open_snoop_file();
-	void delete_snoop_file();
-private:
-	int m_logfd;
-	std::mutex m_mutex;
-	static const uint64_t BTSNOOP_EPOCH_DELTA;
-	static BtSnoop BTSNOOP_INSTANCE;
 
-	typedef struct {
-		uint32_t length_original;
-		uint32_t length_captured;
-		uint32_t flags;
-		uint32_t dropped_packets;
-		uint64_t timestamp;
-		uint8_t type;
-	}__attribute__((__packed__)) btsnoop_header_t;
-	btsnoop_header_t m_log_header;	
-};
-
-#endif //_BLUEGENIUS_SNOOP_H_

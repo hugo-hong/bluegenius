@@ -38,14 +38,14 @@
 #define BT_PROFILE_ADVANCED_AUDIO_SINK_ID	"a2dp_sink"
 #define BT_PROFILE_HEALTH_ID				"health"
 #define BT_PROFILE_SOCKETS_ID				"socket"
-#define BT_PROFILE_HIDHOST_ID				"hidhost"
-#define BT_PROFILE_HIDDEV_ID				"hiddev"
+#define BT_PROFILE_HIDHOST_ID				"hid_host"
+#define BT_PROFILE_HIDDEV_ID				"hid_dev"
 #define BT_PROFILE_PAN_ID					"pan"
 #define BT_PROFILE_MAP_CLIENT_ID			"map_client"
 #define BT_PROFILE_SDP_CLIENT_ID			"sdp"
 #define BT_PROFILE_GATT_ID					"gatt"
-#define BT_PROFILE_AV_RC_TARGET_ID			"avrcp_target"
-#define BT_PROFILE_AV_RC_CTRL_ID			"avrcp_ctrl"
+#define BT_PROFILE_AVRC_TARGET_ID			"avrcp_target"
+#define BT_PROFILE_AVRC_CTRL_ID				"avrcp_ctrl"
 #define BT_PROFILE_HEARING_AID_ID			"hearing_aid"
 
 /** Bluetooth Device Name */

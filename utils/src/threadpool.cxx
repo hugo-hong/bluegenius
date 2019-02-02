@@ -140,7 +140,9 @@ void Worker::set_priority(int priority) {
 	pthread_setschedparam(m_tid, policy, static_cast<const struct sched_param*>(&param));
 }
 
-ThreadPool::ThreadPool(int threads) {
+ThreadPool::ThreadPool(int threads)
+	:m_threads()
+	,m_mutex() {
 	if (threads > kMaxThreadNum) {
 		throw std::runtime_error("The initial threads too large");
 	}
@@ -157,6 +159,8 @@ ThreadPool::~ThreadPool() {
 }
 
 bool ThreadPool::push(Worker* worker) {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
 	if (m_threads.size() >= kMaxThreadNum)
 		return false;
 
@@ -165,6 +169,8 @@ bool ThreadPool::push(Worker* worker) {
 }
 
 Worker* ThreadPool::peek() {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
 	for (auto &item : m_threads) {
 		if (item.second == false) {
 			item.second = true;
@@ -176,6 +182,8 @@ Worker* ThreadPool::peek() {
 }
 
 void ThreadPool::flush() {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
 	for (auto &item : m_threads) {
 		item.second = false;
 		if (item.first->get_state() == Worker::State::RUNNING) {
@@ -184,17 +192,30 @@ void ThreadPool::flush() {
 	}
 }
 
+bool ThreadPool::pop(Worker* worker) {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	for (std::vector<std::pair<Worker*, bool>>::iterator it = m_threads.begin();
+		it != m_threads.end(); ++it) {
+		if (it->first == worker && it->second == true) {
+			delete it->first;
+			m_threads.erase(it);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void ThreadPool::terminate() {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
 	for (auto &item : m_threads) {
 		item.second = false;
-		if (item.first->get_state() == Worker::State::RUNNING) {
+		if (item.first != nullptr) {
 			item.first->stop();
 			item.first->join();			
-		}
-		else {
-			item.first->stop();
-			item.first->join();
-		}
+		}		
 		delete item.first;
 	}
 	m_threads.clear();

@@ -1,7 +1,7 @@
 /*********************************************************************************
    Bluegenius - Bluetooth host protocol stack for Linux/android/windows...
-   Copyright (C) 
-   Written 2017 by hugoï¼ˆyongguang hongï¼‰ <hugo.08@163.com>
+   Copyright (C)
+   Written 2017 by hugo£¨yongguang hong£© <hugo.08@163.com>
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
    published by the Free Software Foundation;
@@ -17,42 +17,20 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
-#ifndef _BLUEGENIUS_SNOOP_H_
-#define _BLUEGENIUS_SNOOP_H_
-#include "bt_hci.h"
-#include "module.h"
+#define LOG_TAG "bluegenius_transport"
+#include <errno.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <string.h>
+#include <poll.h>
 
-class BtSnoop : public Module {
-public:	
+#include <sys/socket.h>
+#include <sys/ioctl.h>
 
-	BtSnoop() : Module() {}
-	~BtSnoop() {}
+#include "transport.h"
 
-	virtual Future* start_up();
-	virtual Future* shut_down();
+#define BTPORT_HCI     1
 
-	void capture(const BT_HDR* buffer, bool is_received);
-
-	static BtSnoop& GetInstance() { return BTSNOOP_INSTANCE; }
-
-protected:	
-	int open_snoop_file();
-	void delete_snoop_file();
-private:
-	int m_logfd;
-	std::mutex m_mutex;
-	static const uint64_t BTSNOOP_EPOCH_DELTA;
-	static BtSnoop BTSNOOP_INSTANCE;
-
-	typedef struct {
-		uint32_t length_original;
-		uint32_t length_captured;
-		uint32_t flags;
-		uint32_t dropped_packets;
-		uint64_t timestamp;
-		uint8_t type;
-	}__attribute__((__packed__)) btsnoop_header_t;
-	btsnoop_header_t m_log_header;	
-};
-
-#endif //_BLUEGENIUS_SNOOP_H_
+#define RFKILL_TYPE_BLUETOOTH   2
+#define RFKILL_OP_CHANGE_ALL    3

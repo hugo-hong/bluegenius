@@ -48,7 +48,7 @@
 
 #define CHECK(assertion)                                   \
   if (__builtin_expect(!(assertion), false)) {             \
-    LOG_TRACE(0, "%s:%d: %s\n", __FILE__, __LINE__, #assertion); \
+    LOG_ERROR(0, "%s:%d: %s\n", __FILE__, __LINE__, #assertion); \
     abort();                                               \
   }
 

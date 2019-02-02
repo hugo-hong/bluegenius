@@ -30,11 +30,3 @@ static const uint32_t COMMAND_TIMEOUT_RESTART_US = 500000;
 
 
 
-static future_t* start_up(void) {
-   LOG_INFO(LOG_TAG, "%s", __func__);
-
-}
-
-static future_t* shut_down() {
-}
-

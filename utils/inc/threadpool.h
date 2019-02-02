@@ -21,6 +21,7 @@
 #define _UTIL_THREADPOOL_H_
 #include <map>
 #include <vector>
+#include <mutex>
 #include <pthread.h>
 
 class ConCurrency;
@@ -35,7 +36,7 @@ public:
 		NORMAL,
 		HIGH
 	};
-	Task(Priority p = NORMAL, void *arg = nullptr)
+	Task(Priority p = NORMAL)
 		:m_priority(p) {}
 	~Task() {}
 
@@ -87,6 +88,7 @@ public:
 
 	bool push(Worker* worker);
 	Worker* peek();
+	bool pop(Worker* worker);
 	void flush();
 
 protected:
@@ -95,7 +97,7 @@ protected:
 private:
 	static const int kMaxThreadNum;
 	std::vector<std::pair<Worker*, bool>> m_threads;
-
+	std::mutex m_mutex;
 };
 
 

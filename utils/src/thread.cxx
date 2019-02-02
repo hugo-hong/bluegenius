@@ -33,6 +33,7 @@
 #include "fixed_queue.h"
 #include "allocator.h"
 #include "thread.h"
+#include "eventbus.h"
 
 struct entry_arg {
 	Thread* thread;

@@ -1,7 +1,7 @@
 /*********************************************************************************
    Bluegenius - Bluetooth host protocol stack for Linux/android/windows...
-   Copyright (C) 
-   Written 2017 by hugoï¼ˆyongguang hongï¼‰ <hugo.08@163.com>
+   Copyright (C)
+   Written 2017 by hugo£¨yongguang hong£© <hugo.08@163.com>
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License version 2 as
    published by the Free Software Foundation;
@@ -17,42 +17,24 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 *********************************************************************************/
-#ifndef _BLUEGENIUS_SNOOP_H_
-#define _BLUEGENIUS_SNOOP_H_
-#include "bt_hci.h"
-#include "module.h"
+#ifndef _BLUEGENIUS_HCI_H_
+#define _BLUEGENIUS_HCI_H_
 
-class BtSnoop : public Module {
-public:	
+#define HCI_ACL_MAX_SIZE	1024
+#define HCI_MAX_FRAME_SIZE (HCI_ACL_MAX_SIZE + 4/*acl data header*/)
 
-	BtSnoop() : Module() {}
-	~BtSnoop() {}
+typedef enum {
+	COMMAND_PACKET = 1,
+	ACL_PACKET = 2,
+	SCO_PACKET = 3,
+	EVENT_PACKET = 4
+} hci_packet_type_t;
 
-	virtual Future* start_up();
-	virtual Future* shut_down();
-
-	void capture(const BT_HDR* buffer, bool is_received);
-
-	static BtSnoop& GetInstance() { return BTSNOOP_INSTANCE; }
-
-protected:	
-	int open_snoop_file();
-	void delete_snoop_file();
-private:
-	int m_logfd;
-	std::mutex m_mutex;
-	static const uint64_t BTSNOOP_EPOCH_DELTA;
-	static BtSnoop BTSNOOP_INSTANCE;
-
-	typedef struct {
-		uint32_t length_original;
-		uint32_t length_captured;
-		uint32_t flags;
-		uint32_t dropped_packets;
-		uint64_t timestamp;
-		uint8_t type;
-	}__attribute__((__packed__)) btsnoop_header_t;
-	btsnoop_header_t m_log_header;	
-};
-
-#endif //_BLUEGENIUS_SNOOP_H_
+typedef struct {
+	uint16_t          event;
+	uint16_t          len;
+	uint16_t          offset;
+	uint16_t          layer_specific;
+	uint8_t           data[];
+} BT_HDR;
+#endif // _BLUEGENIUS_HCI_H_
