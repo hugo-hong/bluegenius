@@ -86,6 +86,29 @@ Future* BtSnoop::shut_down() {
 
 
 void BtSnoop::capture(const BT_HDR* buffer, bool is_received) {
+	const uint8_t *p = buffer->data + buffer->offset;
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (m_logfd == INVALID_FD)
+		return;
+
+	switch (buffer->event & MSG_EVT_MASK) {
+	case MSG_STACK_TO_HC_HCI_CMD:
+		write_packet(COMMAND_PACKET, (uint8_t*)p, true);
+		break;
+	case MSG_HC_TO_STACK_HCI_ACL:
+	case MSG_STACK_TO_HC_HCI_ACL:
+		write_packet(ACL_PACKET, (uint8_t*)p, is_received);
+		break;
+	case MSG_HC_TO_STACK_HCI_SCO:
+	case MSG_STACK_TO_HC_HCI_SCO:
+		write_packet(SCO_PACKET, (uint8_t*)p, is_received);
+		break;	
+	case MSG_HC_TO_STACK_HCI_EVT:
+		write_packet(EVENT_PACKET, (uint8_t*)p, false);
+		break;
+	}
 }
 
 int BtSnoop::open_snoop_file() {
@@ -127,4 +150,57 @@ void BtSnoop::delete_snoop_file() {
 	remove(log_path);
 	remove(last_log_path);
 	
+}
+
+void BtSnoop::write_packet(hci_packet_type_t type, uint8_t *packet, bool is_received) {
+	int length;
+	int flags;
+	int drops = 0;
+	switch (type)
+	{
+	case COMMAND_PACKET:
+		length = packet[2] + 4;
+		flags = 2;
+		break;
+	case ACL_PACKET:
+		length = (packet[3] << 8) + packet[2] + 5;
+		flags = is_received;
+		break;
+	case SCO_PACKET:
+		length = packet[2] + 4;
+		flags = is_received;
+		break;
+	case EVENT_PACKET:
+		length = packet[1] + 3;
+		flags = 3;
+		break;
+	default:
+		break;
+	}
+
+	//prepare packet header
+	btsnoop_header_t log_header;
+	log_header.length_original = htonl(length);
+	log_header.length_captured = log_header.length_original;
+	log_header.flags = htonl(flags);
+	log_header.dropped_packets = htonl(drops);
+	log_header.timestamp = htonq(BtSnoop::get_timestamp());
+	log_header.type = type;
+
+	//write to file
+	if (m_logfd != INVALID_FD) {
+		write(m_logfd, &log_header, sizeof(btsnoop_header_t));
+		write(m_logfd, packet, length - 1);
+	}
+}
+
+uint64_t BtSnoop::get_timestamp() {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	//timestamp is in microseconds
+	uint64_t timestamp = tv.tv_sec * 1000 * 1000LL;
+	timestamp += tv.tv_usec;
+	timestamp += BTSNOOP_EPOCH_DELTA;
+	return timestamp;
 }

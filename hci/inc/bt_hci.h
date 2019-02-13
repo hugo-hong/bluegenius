@@ -23,6 +23,25 @@
 #define HCI_ACL_MAX_SIZE	1024
 #define HCI_MAX_FRAME_SIZE (HCI_ACL_MAX_SIZE + 4/*acl data header*/)
 
+/* Message event mask across Host/Controller lib and stack */
+#define MSG_EVT_MASK                    0xFF00 /* eq. BT_EVT_MASK */
+#define MSG_SUB_EVT_MASK                0x00FF /* eq. BT_SUB_EVT_MASK */
+
+/* Message event ID passed from Host/Controller lib to stack */
+#define MSG_HC_TO_STACK_HCI_ERR        0x1300 /* eq. BT_EVT_TO_BTU_HCIT_ERR */
+#define MSG_HC_TO_STACK_HCI_ACL        0x1100 /* eq. BT_EVT_TO_BTU_HCI_ACL */
+#define MSG_HC_TO_STACK_HCI_SCO        0x1200 /* eq. BT_EVT_TO_BTU_HCI_SCO */
+#define MSG_HC_TO_STACK_HCI_EVT        0x1000 /* eq. BT_EVT_TO_BTU_HCI_EVT */
+#define MSG_HC_TO_STACK_L2C_SEG_XMIT   0x1900 /* eq. BT_EVT_TO_BTU_L2C_SEG_XMIT */
+
+/* Message event ID passed from stack to vendor lib */
+#define MSG_STACK_TO_HC_HCI_ACL        0x2100 /* eq. BT_EVT_TO_LM_HCI_ACL */
+#define MSG_STACK_TO_HC_HCI_SCO        0x2200 /* eq. BT_EVT_TO_LM_HCI_SCO */
+#define MSG_STACK_TO_HC_HCI_CMD        0x2000 /* eq. BT_EVT_TO_LM_HCI_CMD */
+
+/* Local Bluetooth Controller ID for BR/EDR */
+#define LOCAL_BR_EDR_CONTROLLER_ID      0
+
 typedef enum {
 	COMMAND_PACKET = 1,
 	ACL_PACKET = 2,
@@ -37,4 +56,8 @@ typedef struct {
 	uint16_t          layer_specific;
 	uint8_t           data[];
 } BT_HDR;
+#define BT_HDR_SIZE		(sizeof(BT_HDR))
+
+
+
 #endif // _BLUEGENIUS_HCI_H_

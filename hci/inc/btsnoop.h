@@ -38,6 +38,8 @@ public:
 protected:	
 	int open_snoop_file();
 	void delete_snoop_file();
+	void write_packet(hci_packet_type_t type, uint8_t *packet, bool is_received);
+	static uint64_t get_timestamp();
 private:
 	int m_logfd;
 	std::mutex m_mutex;
@@ -52,7 +54,6 @@ private:
 		uint64_t timestamp;
 		uint8_t type;
 	}__attribute__((__packed__)) btsnoop_header_t;
-	btsnoop_header_t m_log_header;	
 };
 
 #endif //_BLUEGENIUS_SNOOP_H_
